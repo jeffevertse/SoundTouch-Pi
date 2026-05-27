@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>SoundTouch Controller</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #111;
+      --surface: #1e1e1e;
+      --surface2: #2a2a2a;
+      --border: #333;
+      --accent: #00b4d8;
+      --accent2: #90e0ef;
+      --text: #e0e0e0;
+      --muted: #888;
+      --green: #4caf50;
+      --red: #f44336;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
+      padding: 16px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    h1 { font-size: 1.2rem; font-weight: 600; color: var(--accent2); margin-bottom: 4px; }
+    .device-name { font-size: 0.8rem; color: var(--muted); margin-bottom: 20px; }
+
+    /* Now Playing */
+    .now-playing {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .now-playing .label { font-size: 0.7rem; text-transform: uppercase; color: var(--muted); letter-spacing: 1px; }
+    .now-playing .station { font-size: 1.1rem; font-weight: 600; margin-top: 4px; }
+    .now-playing .meta { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+    .status-dot {
+      display: inline-block; width: 8px; height: 8px;
+      border-radius: 50%; margin-right: 6px;
+      background: var(--muted);
+    }
+    .status-dot.playing { background: var(--green); animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* Volume */
+    .volume-row {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 16px; margin-bottom: 20px;
+    }
+    .volume-row .vol-label { font-size: 0.8rem; color: var(--muted); min-width: 60px; }
+    .volume-row input[type=range] {
+      flex: 1; accent-color: var(--accent);
+      -webkit-appearance: none; height: 4px;
+      background: var(--border); border-radius: 2px; outline: none;
+    }
+    .vol-num { font-size: 0.9rem; font-weight: 600; min-width: 30px; text-align: right; }
+
+    /* Controls */
+    .controls {
+      display: flex; gap: 10px; justify-content: center;
+      margin-bottom: 24px; flex-wrap: wrap;
+    }
+    .btn {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); border-radius: 10px; padding: 10px 16px;
+      font-size: 0.9rem; cursor: pointer; transition: background .15s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .btn:hover, .btn:active { background: var(--border); }
+    .btn.accent { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+    .btn.danger { border-color: var(--red); color: var(--red); }
+    .btn-icon { font-size: 1.1rem; }
+
+    /* Section header */
+    .section-label {
+      font-size: 0.7rem; text-transform: uppercase; color: var(--muted);
+      letter-spacing: 1px; margin-bottom: 10px;
+    }
+
+    /* Presets grid */
+    .presets-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 10px; margin-bottom: 24px;
+    }
+    .preset-btn {
+      background: var(--surface); border: 2px solid var(--border);
+      border-radius: 12px; padding: 14px 12px;
+      cursor: pointer; text-align: left; transition: border-color .15s;
+      position: relative;
+    }
+    .preset-btn:hover { border-color: var(--accent); }
+    .preset-btn.active { border-color: var(--accent); background: rgba(0,180,216,0.08); }
+    .preset-btn .preset-num {
+      font-size: 0.65rem; color: var(--muted); font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+    .preset-btn .preset-icon { font-size: 1.4rem; margin: 4px 0; display: block; }
+    .preset-btn .preset-name { font-size: 0.9rem; font-weight: 600; }
+    .preset-btn .preset-source { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+    .preset-btn .edit-btn {
+      position: absolute; top: 8px; right: 8px;
+      background: none; border: none; color: var(--muted);
+      cursor: pointer; font-size: 0.75rem; padding: 2px 4px;
+    }
+    .preset-btn .edit-btn:hover { color: var(--text); }
+
+    /* Sources */
+    .sources-row {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px;
+    }
+
+    /* Edit modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.75); z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 24px; width: min(420px, calc(100vw - 32px));
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal h2 { font-size: 1rem; margin-bottom: 16px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+    .form-group input, .form-group select {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px; padding: 10px 12px;
+      font-size: 0.9rem; outline: none;
+    }
+    .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--surface2); border: 1px solid var(--border);
+      padding: 10px 20px; border-radius: 20px; font-size: 0.85rem;
+      opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 200;
+    }
+    .toast.show { opacity: 1; }
+
+    /* WiFi panel */
+    .wifi-section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; user-select: none;
+    }
+    .wifi-network-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; margin-bottom: 6px; cursor: pointer;
+      transition: border-color .15s;
+    }
+    .wifi-network-item:hover { border-color: var(--accent); }
+    .wifi-message {
+      border-radius: 10px; padding: 12px 14px; margin-top: 10px;
+      font-size: 0.82rem; line-height: 1.6; white-space: pre-line;
+      display: none;
+    }
+    .wifi-message.ok   { background: rgba(0,180,216,.1); border: 1px solid var(--accent); }
+    .wifi-message.fail { background: rgba(244,67,54,.1); border: 1px solid var(--red); }
+
+    .error-banner {
+      background: rgba(244,67,54,.15); border: 1px solid var(--red);
+      color: var(--red); border-radius: 10px; padding: 10px 14px;
+      margin-bottom: 16px; font-size: 0.85rem; display: none;
+    }
+    .error-banner.show { display: block; }
+
+    /* Bass slider */
+    .bass-row {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 16px; margin-bottom: 20px;
+    }
+    .bass-row .vol-label { font-size: 0.8rem; color: var(--muted); min-width: 60px; }
+    .bass-row input[type=range] {
+      flex: 1; accent-color: var(--accent2);
+      -webkit-appearance: none; height: 4px;
+      background: var(--border); border-radius: 2px; outline: none;
+    }
+
+    footer { text-align: center; font-size: 0.7rem; color: var(--muted); margin-top: 32px; padding-bottom: 16px; }
+  </style>
+</head>
+<body>
+
+  <h1>🔊 SoundTouch</h1>
+  <div class="device-name" id="device-name">Connecting…</div>
+
+  <div class="error-banner" id="error-banner"></div>
+
+  <!-- Now Playing -->
+  <div class="now-playing">
+    <div class="label">Now Playing</div>
+    <div class="station">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="np-station">—</span>
+    </div>
+    <div class="meta" id="np-meta"></div>
+  </div>
+
+  <!-- Volume -->
+  <div class="volume-row">
+    <span class="vol-label">🔈 Volume</span>
+    <input type="range" id="vol-slider" min="0" max="100" value="30">
+    <span class="vol-num" id="vol-num">—</span>
+  </div>
+
+  <!-- Bass (shown if supported) -->
+  <div class="bass-row" id="bass-row" style="display:none">
+    <span class="vol-label">🎚 Bass</span>
+    <input type="range" id="bass-slider" min="-9" max="9" value="0">
+    <span class="vol-num" id="bass-num">0</span>
+  </div>
+
+  <!-- Transport Controls -->
+  <div class="controls">
+    <button class="btn" onclick="control('power')" title="Power">
+      <span class="btn-icon">⏻</span>
+    </button>
+    <button class="btn" onclick="control('prev')">
+      <span class="btn-icon">⏮</span>
+    </button>
+    <button class="btn accent" onclick="control('play_pause')">
+      <span class="btn-icon" id="play-icon">▶ / ⏸</span>
+    </button>
+    <button class="btn" onclick="control('next')">
+      <span class="btn-icon">⏭</span>
+    </button>
+    <button class="btn" onclick="control('mute')" title="Mute">
+      <span class="btn-icon">🔇</span>
+    </button>
+  </div>
+
+  <!-- Virtual Presets -->
+  <div class="section-label">Internet Radio Presets</div>
+  <div class="presets-grid" id="presets-grid"></div>
+
+  <!-- Sync hardware presets -->
+  <div style="margin-bottom:24px">
+    <button class="btn" id="sync-btn" onclick="syncHardwarePresets()" style="width:100%;justify-content:center;gap:8px">
+      <span>📲</span> Sync to Device Buttons
+    </button>
+    <div style="font-size:0.72rem;color:var(--muted);margin-top:6px;text-align:center">
+      Writes your presets into the 6 physical buttons on the speaker
+    </div>
+    <div id="sync-result" style="font-size:0.75rem;color:var(--muted);margin-top:8px;display:none"></div>
+  </div>
+
+  <!-- Other Sources -->
+  <div class="section-label">Other Sources</div>
+  <div class="sources-row">
+    <button class="btn" onclick="control('aux')">AUX Input</button>
+    <button class="btn" onclick="control('bluetooth')">Bluetooth</button>
+  </div>
+
+  <!-- Edit Preset Modal -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <h2>Edit Preset <span id="modal-preset-num"></span></h2>
+
+      <div class="form-group">
+        <label>Station Name</label>
+        <input type="text" id="edit-name" placeholder="e.g. BBC Radio 4">
+      </div>
+      <div class="form-group">
+        <label>Stream URL</label>
+        <input type="url" id="edit-stream-url" placeholder="https://stream.example.com/radio.mp3">
+      </div>
+      <div class="form-group">
+        <label>Icon (emoji)</label>
+        <input type="text" id="edit-icon" placeholder="📻" maxlength="4">
+      </div>
+
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:8px">
+        Paste any public <strong>HTTP or HTTPS MP3/AAC stream URL</strong>. Good sources:
+        <a href="https://www.radio-browser.info" target="_blank" style="color:var(--accent)">radio-browser.info</a>
+        · BBC streams use <code>http://stream.live.vc.bbcmedia.co.uk/bbc_radio_four_fm</code> format.
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn accent" onclick="savePreset()">Save & Play</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- ── WiFi Settings (collapsible) ──────────────────────────────────── -->
+  <div style="margin-bottom: 24px">
+    <div class="section-label wifi-section-header" onclick="toggleWifi()">
+      <span>📶 WiFi Settings</span>
+      <span id="wifi-arrow">▶</span>
+    </div>
+
+    <div id="wifi-panel" style="display:none; margin-top:10px">
+
+      <!-- Current status card -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px">
+        <div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Current WiFi</div>
+        <div style="font-size:1rem;font-weight:600;margin-top:4px" id="wifi-ssid-label">—</div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:2px" id="wifi-detail-label"></div>
+      </div>
+
+      <!-- Scan button -->
+      <button class="btn" id="wifi-scan-btn" onclick="wifiScan()"
+              style="width:100%;justify-content:center;margin-bottom:10px">
+        🔍 Scan for Networks
+      </button>
+
+      <!-- Scanned network list (hidden until scan completes) -->
+      <div id="wifi-network-list" style="display:none;margin-bottom:10px"></div>
+
+      <!-- Connect form (hidden until a network is selected) -->
+      <div id="wifi-connect-form"
+           style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px">
+        <div style="font-size:0.8rem;color:var(--muted);margin-bottom:10px">
+          Connecting to: <strong id="wifi-selected-name"></strong>
+        </div>
+        <div class="form-group" id="wifi-pw-group">
+          <label>Password</label>
+          <input type="password" id="wifi-pw-input" placeholder="WiFi password"
+                 style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:0.9rem;outline:none">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn" onclick="wifiCancelConnect()" style="flex:1;justify-content:center">Cancel</button>
+          <button class="btn accent" onclick="wifiDoConnect()" style="flex:1;justify-content:center">Connect</button>
+        </div>
+      </div>
+
+      <!-- Message / instructions box -->
+      <div id="wifi-msg" class="wifi-message"></div>
+
+      <!-- Hotspot toggle -->
+      <button class="btn" id="wifi-hotspot-btn" onclick="wifiToggleHotspot()"
+              style="width:100%;justify-content:center;margin-top:10px">
+        📡 Enable Setup Hotspot
+      </button>
+      <div style="font-size:0.72rem;color:var(--muted);text-align:center;margin-top:6px">
+        Creates "SoundTouch-Setup" so you can reconfigure WiFi from any phone or laptop
+      </div>
+
+    </div>
+  </div>
+
+  <footer>SoundTouch Pi Controller · <span id="device-host"></span></footer>
+
+<script>
+  let presets = [];
+  let editingId = null;
+  let volTimer = null;
+  let bassTimer = null;
+  let bassAvailable = false;
+  let bassMin = -9, bassMax = 9;
+
+  // ── init ────────────────────────────────────────────────────────────────
+
+  let activePresetId = null;  // tracks which preset is currently playing
+
+  async function init() {
+    await Promise.all([loadStatus(), loadPresets(), loadBass()]);
+    loadInfo();
+    connectSSE();
+    // Slow fallback poll — SSE handles real-time, this is a safety net
+    setInterval(loadStatus, 30000);
+  }
+
+  // ── API helpers ─────────────────────────────────────────────────────────
+
+  async function api(path, opts = {}) {
+    const r = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      ...opts,
+    });
+    return r.json();
+  }
+
+  function showError(msg) {
+    const b = document.getElementById("error-banner");
+    b.textContent = msg;
+    b.classList.add("show");
+    setTimeout(() => b.classList.remove("show"), 5000);
+  }
+
+  function toast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2000);
+  }
+
+  // ── SSE — real-time push from server ────────────────────────────────────
+
+  function connectSSE() {
+    const es = new EventSource("/api/events");
+
+    es.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === "nowPlaying") applyNowPlaying(msg.data);
+      if (msg.type === "volume")     applyVolume(msg.data);
+      if (msg.type === "error")      showError(msg.data.message);
+    };
+
+    es.onerror = () => {
+      // Browser auto-reconnects EventSource; nothing needed here
+    };
+  }
+
+  // ── now-playing rendering ────────────────────────────────────────────────
+
+  function applyNowPlaying(np) {
+    const isPlaying = np.status === "PLAY_STATE" || np.status === "BUFFERING_STATE";
+
+    document.getElementById("status-dot").className =
+      "status-dot" + (isPlaying ? " playing" : "");
+
+    // Station name — prefer our saved name (shown by server), fall back to device's
+    const station = np.station || np.content_item?.name || "—";
+    const icon    = np.icon ? np.icon + " " : "";
+    document.getElementById("np-station").textContent = icon + station;
+
+    const parts = [np.artist, np.track].filter(Boolean);
+    document.getElementById("np-meta").textContent =
+      parts.length ? parts.join(" — ") : "";
+
+    // Highlight the active preset card
+    if (np.preset_id) activePresetId = np.preset_id;
+    presets.forEach(p => {
+      const el = document.getElementById(`preset-btn-${p.id}`);
+      if (el) el.classList.toggle("active", p.id === activePresetId && isPlaying);
+    });
+  }
+
+  function applyVolume(vol) {
+    if (!volTimer) {
+      document.getElementById("vol-slider").value = vol.actual;
+      document.getElementById("vol-num").textContent = vol.actual;
+    }
+  }
+
+  // ── status (initial load + fallback poll) ────────────────────────────────
+
+  async function loadStatus() {
+    const data = await api("/api/status");
+    if (!data.ok) { showError(data.error); return; }
+    applyNowPlaying(data.now_playing);
+    applyVolume(data.volume);
+  }
+
+  async function loadInfo() {
+    const data = await api("/api/info");
+    if (!data.ok) return;
+    document.getElementById("device-name").textContent =
+      `${data.info.name} · ${data.info.type}`;
+    document.getElementById("device-host").textContent = data.host;
+  }
+
+  // ── presets ─────────────────────────────────────────────────────────────
+
+  const FALLBACK_PRESETS = Array.from({length: 6}, (_, i) => ({
+    id: i + 1, name: `Preset ${i + 1}`, stream_url: "", icon: "📻"
+  }));
+
+  async function loadPresets() {
+    try {
+      const data = await api("/api/presets");
+      presets = (data.virtual && data.virtual.length) ? data.virtual : FALLBACK_PRESETS;
+    } catch {
+      presets = FALLBACK_PRESETS;
+    }
+    renderPresets();
+  }
+
+  function renderPresets() {
+    const grid = document.getElementById("presets-grid");
+    grid.innerHTML = "";
+    presets.forEach(p => {
+      const div = document.createElement("div");
+      div.className = "preset-btn";
+      div.id = `preset-btn-${p.id}`;
+      div.innerHTML = `
+        <div class="preset-num">Preset ${p.id}</div>
+        <span class="preset-icon">${p.icon || "📻"}</span>
+        <div class="preset-name">${esc(p.name)}</div>
+        <button class="edit-btn" onclick="openEdit(${p.id}, event)" title="Edit">✏️</button>
+      `;
+      div.addEventListener("click", e => {
+        if (e.target.closest(".edit-btn")) return;
+        playPreset(p.id);
+      });
+      grid.appendChild(div);
+    });
+  }
+
+  async function playPreset(id) {
+    const p = presets.find(x => x.id === id);
+    if (!p?.stream_url) { toast("Preset not configured — tap ✏️ to set a stream URL"); return; }
+    activePresetId = id;
+    // Immediately highlight the tapped preset
+    presets.forEach(q => {
+      const el = document.getElementById(`preset-btn-${q.id}`);
+      if (el) el.classList.toggle("active", q.id === id);
+    });
+    document.getElementById("np-station").textContent = (p.icon || "📻") + " " + p.name;
+    document.getElementById("status-dot").className = "status-dot playing";
+    toast(`Playing ${p.name}…`);
+    const data = await api(`/api/preset/${id}/play`, { method: "POST" });
+    if (!data.ok) showError(data.error);
+    else setTimeout(loadStatus, 1500);
+  }
+
+  // ── volume ──────────────────────────────────────────────────────────────
+
+  document.getElementById("vol-slider").addEventListener("input", e => {
+    document.getElementById("vol-num").textContent = e.target.value;
+    clearTimeout(volTimer);
+    volTimer = setTimeout(async () => {
+      await api("/api/volume", {
+        method: "POST",
+        body: JSON.stringify({ level: parseInt(e.target.value) }),
+      });
+      volTimer = null;
+    }, 300);
+  });
+
+  // ── bass ────────────────────────────────────────────────────────────────
+
+  async function loadBass() {
+    const data = await api("/api/bass");
+    if (!data.ok || !data.caps.available) return;
+    bassAvailable = true;
+    bassMin = data.caps.min;
+    bassMax = data.caps.max;
+    const row = document.getElementById("bass-row");
+    const slider = document.getElementById("bass-slider");
+    slider.min = bassMin;
+    slider.max = bassMax;
+    slider.value = data.level ?? 0;
+    document.getElementById("bass-num").textContent = data.level ?? 0;
+    row.style.display = "flex";
+  }
+
+  document.getElementById("bass-slider").addEventListener("input", e => {
+    document.getElementById("bass-num").textContent = e.target.value;
+    clearTimeout(bassTimer);
+    bassTimer = setTimeout(async () => {
+      await api("/api/bass", {
+        method: "POST",
+        body: JSON.stringify({ level: parseInt(e.target.value) }),
+      });
+      bassTimer = null;
+    }, 400);
+  });
+
+  // ── controls ─────────────────────────────────────────────────────────────
+
+  async function control(action) {
+    const data = await api(`/api/control/${action}`, { method: "POST" });
+    if (!data.ok) showError(data.error);
+    else setTimeout(loadStatus, 800);
+  }
+
+  // ── edit modal ───────────────────────────────────────────────────────────
+
+  function openEdit(id, e) {
+    e.stopPropagation();
+    editingId = id;
+    const p = presets.find(x => x.id === id) || {};
+    document.getElementById("modal-preset-num").textContent = id;
+    document.getElementById("edit-name").value = p.name || "";
+    document.getElementById("edit-stream-url").value = p.stream_url || "";
+    document.getElementById("edit-icon").value = p.icon || "📻";
+    document.getElementById("modal-overlay").classList.add("open");
+  }
+
+  function closeModal() {
+    document.getElementById("modal-overlay").classList.remove("open");
+    editingId = null;
+  }
+
+  document.getElementById("modal-overlay").addEventListener("click", e => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+
+  async function savePreset() {
+    const payload = {
+      name: document.getElementById("edit-name").value.trim(),
+      stream_url: document.getElementById("edit-stream-url").value.trim(),
+      icon: document.getElementById("edit-icon").value.trim() || "📻",
+    };
+    if (!payload.name) { alert("Enter a station name"); return; }
+
+    const data = await api(`/api/preset/${editingId}/save`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    if (!data.ok) { showError(data.error); return; }
+    closeModal();
+    await loadPresets();
+    if (payload.stream_url) playPreset(editingId);
+  }
+
+  // ── sync hardware presets ─────────────────────────────────────────────────
+
+  async function syncHardwarePresets() {
+    const btn = document.getElementById("sync-btn");
+    const resultEl = document.getElementById("sync-result");
+    btn.disabled = true;
+    btn.textContent = "Syncing…";
+    resultEl.style.display = "none";
+    try {
+      const data = await api("/api/sync-hardware-presets", { method: "POST" });
+      if (!data.ok) {
+        showError(data.error || "Sync failed");
+        return;
+      }
+      const ok  = data.results.filter(r => r.ok).length;
+      const bad = data.results.filter(r => !r.ok);
+      let msg = `✅ ${ok} preset${ok !== 1 ? "s" : ""} written to device buttons.`;
+      if (bad.length) {
+        msg += `  ⚠️ ${bad.map(r => `#${r.id}: ${r.reason}`).join(", ")}`;
+      }
+      resultEl.textContent = msg;
+      resultEl.style.display = "block";
+      toast("Device buttons updated!");
+    } catch (e) {
+      showError("Sync request failed: " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = "<span>📲</span> Sync to Device Buttons";
+    }
+  }
+
+  function esc(s) {
+    return (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  // ── WiFi management ───────────────────────────────────────────────────────
+
+  let wifiPanelOpen   = false;
+  let wifiHotspotMode = false;
+  let wifiSelectedSsid = null;
+  let wifiSelectedOpen = false;
+
+  function toggleWifi() {
+    wifiPanelOpen = !wifiPanelOpen;
+    document.getElementById("wifi-panel").style.display = wifiPanelOpen ? "block" : "none";
+    document.getElementById("wifi-arrow").textContent   = wifiPanelOpen ? "▼" : "▶";
+    if (wifiPanelOpen) wifiLoadStatus();
+  }
+
+  async function wifiLoadStatus() {
+    try {
+      const data = await api("/api/wifi/status");
+      if (!data.ok) return;
+      const ssidEl   = document.getElementById("wifi-ssid-label");
+      const detailEl = document.getElementById("wifi-detail-label");
+      const btn      = document.getElementById("wifi-hotspot-btn");
+
+      wifiHotspotMode = data.mode === "hotspot";
+
+      if (data.mode === "client") {
+        ssidEl.textContent   = data.ssid || "Connected";
+        const sig = data.signal != null ? ` · ${data.signal}% signal` : "";
+        detailEl.textContent = `Connected${sig}${data.ip ? " · " + data.ip : ""}`;
+        btn.innerHTML        = "📡 Enable Setup Hotspot";
+      } else if (data.mode === "hotspot") {
+        ssidEl.textContent   = "Hotspot: " + (data.ssid || "SoundTouch-Setup");
+        detailEl.textContent = `IP: ${data.ip || "10.42.0.1"} · Password: soundtouch`;
+        btn.innerHTML        = "🔌 Stop Hotspot";
+      } else {
+        ssidEl.textContent   = "Not connected";
+        detailEl.textContent = "";
+        btn.innerHTML        = "📡 Enable Setup Hotspot";
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  function wifiSignalIcon(pct) {
+    if (pct >= 75) return "▂▄▆█";
+    if (pct >= 50) return "▂▄▆░";
+    if (pct >= 25) return "▂▄░░";
+    return            "▂░░░";
+  }
+
+  async function wifiScan() {
+    const btn = document.getElementById("wifi-scan-btn");
+    btn.disabled    = true;
+    btn.textContent = "Scanning…";
+    wifiHideMsg();
+    try {
+      const data = await api("/api/wifi/scan");
+      if (!data.ok) { showError(data.error || "Scan failed"); return; }
+
+      const container = document.getElementById("wifi-network-list");
+      container.innerHTML = "";
+
+      if (!data.networks.length) {
+        container.innerHTML = '<div style="color:var(--muted);font-size:0.82rem;text-align:center;padding:8px">No networks found</div>';
+      } else {
+        data.networks.forEach(n => {
+          const div = document.createElement("div");
+          div.className = "wifi-network-item";
+          div.innerHTML = `
+            <span style="font-size:1rem;font-family:monospace">${wifiSignalIcon(n.signal)}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:0.9rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.ssid)}</div>
+              <div style="font-size:0.72rem;color:var(--muted)">${n.open ? "Open" : "🔒 Secured"} · ${n.signal}%</div>
+            </div>
+            <span style="font-size:0.7rem;color:var(--accent);flex-shrink:0">Connect</span>
+          `;
+          div.addEventListener("click", () => wifiSelectNetwork(n.ssid, n.open));
+          container.appendChild(div);
+        });
+      }
+      container.style.display = "block";
+    } catch (e) {
+      showError("Scan failed: " + e.message);
+    } finally {
+      btn.disabled  = false;
+      btn.innerHTML = "🔍 Scan for Networks";
+    }
+  }
+
+  function wifiSelectNetwork(ssid, open) {
+    wifiSelectedSsid = ssid;
+    wifiSelectedOpen = open;
+    document.getElementById("wifi-selected-name").textContent = ssid;
+    document.getElementById("wifi-pw-group").style.display   = open ? "none" : "block";
+    document.getElementById("wifi-pw-input").value           = "";
+    document.getElementById("wifi-connect-form").style.display = "block";
+    wifiHideMsg();
+    // Scroll form into view on mobile
+    document.getElementById("wifi-connect-form").scrollIntoView({behavior: "smooth", block: "nearest"});
+  }
+
+  function wifiCancelConnect() {
+    wifiSelectedSsid = null;
+    document.getElementById("wifi-connect-form").style.display = "none";
+  }
+
+  async function wifiDoConnect() {
+    if (!wifiSelectedSsid) return;
+    const password = document.getElementById("wifi-pw-input").value;
+    if (!wifiSelectedOpen && !password) {
+      alert("Enter the WiFi password");
+      return;
+    }
+    const data = await api("/api/wifi/connect", {
+      method: "POST",
+      body: JSON.stringify({ ssid: wifiSelectedSsid, password }),
+    });
+    document.getElementById("wifi-connect-form").style.display  = "none";
+    document.getElementById("wifi-network-list").style.display  = "none";
+    wifiShowMsg(data.message || (data.ok ? "Connecting…" : data.error), data.ok);
+  }
+
+  async function wifiToggleHotspot() {
+    const endpoint = wifiHotspotMode ? "/api/wifi/hotspot/stop" : "/api/wifi/hotspot";
+    const data = await api(endpoint, { method: "POST" });
+    wifiShowMsg(data.message || (data.ok ? "Done" : data.error || "Failed"), data.ok);
+    if (data.ok) setTimeout(wifiLoadStatus, 5000);
+  }
+
+  function wifiShowMsg(text, ok) {
+    const el = document.getElementById("wifi-msg");
+    el.textContent = text;
+    el.className   = "wifi-message " + (ok ? "ok" : "fail");
+    el.style.display = "block";
+  }
+
+  function wifiHideMsg() {
+    const el = document.getElementById("wifi-msg");
+    el.style.display = "none";
+  }
+
+  init();
+</script>
+</body>
+</html>
