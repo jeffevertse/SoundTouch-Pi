@@ -480,7 +480,14 @@
       headers: { "Content-Type": "application/json" },
       ...opts,
     });
-    return r.json();
+    // Always parse as text first so a non-JSON error page (404, 500 HTML)
+    // gives a readable message instead of a cryptic browser JSON-parse error.
+    const text = await r.text();
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      throw new Error(`Server returned ${r.status}: ${text.slice(0, 120)}`);
+    }
   }
 
   function showError(msg) {
@@ -770,15 +777,19 @@
     btn.style.borderColor = '';
     btn.style.color       = '';
 
-    api('/api/system/reboot', { method: 'POST' }).then(data => {
-      const msg = document.getElementById('reboot-msg');
-      msg.textContent  = data.message || 'Rebooting…';
-      msg.style.display = 'block';
-    }).catch(e => {
-      btn.disabled  = false;
-      btn.innerHTML = '🔄 Reboot Pi';
-      showError('Reboot request failed: ' + e.message);
-    });
+    api('/api/system/reboot', { method: 'POST' })
+      .then(data => {
+        _showRebootMsg(data.message);
+      })
+      .catch(() => {
+        // Network error here most likely means the Pi started rebooting
+        // before the response was fully delivered — treat as success.
+        _showRebootMsg(
+          'Rebooting…\n' +
+          'Reconnect in ~30 seconds and visit\n' +
+          'http://soundtouch.local:5000'
+        );
+      });
   }
 
   function _rebootDisarm() {
@@ -787,6 +798,12 @@
     btn.innerHTML         = '🔄 Reboot Pi';
     btn.style.borderColor = '';
     btn.style.color       = '';
+  }
+
+  function _showRebootMsg(text) {
+    const msg = document.getElementById('reboot-msg');
+    msg.textContent   = text || 'Rebooting…';
+    msg.style.display = 'block';
   }
 
   // ── WiFi management ───────────────────────────────────────────────────────

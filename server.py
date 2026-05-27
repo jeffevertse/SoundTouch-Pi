@@ -780,7 +780,7 @@ def api_system_reboot():
     short delay so this HTTP response is delivered to the browser first.
     """
     def _reboot():
-        time.sleep(2.0)
+        time.sleep(3.0)   # give gunicorn time to flush the HTTP response
         print("[server] System reboot requested via web UI")
         subprocess.run(["sudo", "shutdown", "-r", "now"])
 
