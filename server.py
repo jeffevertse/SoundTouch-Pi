@@ -8,6 +8,7 @@ import json
 import os
 import queue
 import socket
+import subprocess
 import threading
 import time
 
@@ -768,6 +769,30 @@ def api_sync_hardware_presets():
         return jsonify({"ok": True, "results": results})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 503
+
+
+# ── System ─────────────────────────────────────────────────────────────────
+
+@app.post("/api/system/reboot")
+def api_system_reboot():
+    """
+    Reboot the Pi.  Fires the actual reboot in a background thread after a
+    short delay so this HTTP response is delivered to the browser first.
+    """
+    def _reboot():
+        time.sleep(2.0)
+        print("[server] System reboot requested via web UI")
+        subprocess.run(["sudo", "shutdown", "-r", "now"])
+
+    threading.Thread(target=_reboot, daemon=True).start()
+    return jsonify({
+        "ok": True,
+        "message": (
+            "Rebooting…\n"
+            "The controller will be back in about 30 seconds.\n"
+            "Reconnect and visit http://soundtouch.local:5000"
+        ),
+    })
 
 
 # ── WiFi management ────────────────────────────────────────────────────────

@@ -414,6 +414,19 @@
     </div>
   </div>
 
+  <!-- ── System ────────────────────────────────────────────────────────── -->
+  <div style="margin-bottom:24px">
+    <div class="section-label">System</div>
+    <button class="btn" id="reboot-btn" onclick="rebootSystem()"
+            style="width:100%;justify-content:center">
+      🔄 Reboot Pi
+    </button>
+    <div id="reboot-msg"
+         style="display:none;font-size:0.8rem;color:var(--muted);
+                margin-top:8px;text-align:center;line-height:1.6;white-space:pre-line">
+    </div>
+  </div>
+
   <footer>SoundTouch Pi Controller · <span id="device-host"></span></footer>
 
 <script>
@@ -728,6 +741,52 @@
 
   function esc(s) {
     return (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  // ── System ────────────────────────────────────────────────────────────────
+
+  let _rebootArmed = false;
+  let _rebootTimer = null;
+
+  function rebootSystem() {
+    const btn = document.getElementById('reboot-btn');
+
+    if (!_rebootArmed) {
+      // First tap — arm the button
+      _rebootArmed = true;
+      btn.innerHTML   = '⚠️ Tap again to confirm reboot';
+      btn.style.borderColor = 'var(--red)';
+      btn.style.color       = 'var(--red)';
+      // Auto-disarm after 4 s so an accidental tap doesn't linger
+      _rebootTimer = setTimeout(_rebootDisarm, 4000);
+      return;
+    }
+
+    // Second tap — confirmed
+    clearTimeout(_rebootTimer);
+    _rebootArmed = false;
+    btn.disabled    = true;
+    btn.innerHTML   = '⏳ Rebooting…';
+    btn.style.borderColor = '';
+    btn.style.color       = '';
+
+    api('/api/system/reboot', { method: 'POST' }).then(data => {
+      const msg = document.getElementById('reboot-msg');
+      msg.textContent  = data.message || 'Rebooting…';
+      msg.style.display = 'block';
+    }).catch(e => {
+      btn.disabled  = false;
+      btn.innerHTML = '🔄 Reboot Pi';
+      showError('Reboot request failed: ' + e.message);
+    });
+  }
+
+  function _rebootDisarm() {
+    _rebootArmed = false;
+    const btn = document.getElementById('reboot-btn');
+    btn.innerHTML         = '🔄 Reboot Pi';
+    btn.style.borderColor = '';
+    btn.style.color       = '';
   }
 
   // ── WiFi management ───────────────────────────────────────────────────────
