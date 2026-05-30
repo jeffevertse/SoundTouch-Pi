@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1C7EF7"/>
+      <stop offset="100%" stop-color="#0052CC"/>
+    </linearGradient>
+  </defs>
+  <!-- Background (full square — Xcode clips to rounded rect) -->
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- Speaker cone (pentagon shape) -->
+  <g transform="translate(512,512)">
+    <!-- Speaker body -->
+    <rect x="-90" y="-130" width="90" height="260" rx="12" fill="white" opacity="0.95"/>
+    <!-- Speaker cone triangle -->
+    <polygon points="-90,-130 -90,130 -260,200 -260,-200" fill="white" opacity="0.95"/>
+
+    <!-- Sound wave arcs (right side) -->
+    <!-- Small arc -->
+    <path d="M 70,-70 A 100,100 0 0,1 70,70"
+          fill="none" stroke="white" stroke-width="44" stroke-linecap="round" opacity="0.9"/>
+    <!-- Medium arc -->
+    <path d="M 70,-140 A 170,170 0 0,1 70,140"
+          fill="none" stroke="white" stroke-width="44" stroke-linecap="round" opacity="0.7"/>
+    <!-- Large arc -->
+    <path d="M 70,-210 A 240,240 0 0,1 70,210"
+          fill="none" stroke="white" stroke-width="44" stroke-linecap="round" opacity="0.45"/>
+  </g>
+</svg>
