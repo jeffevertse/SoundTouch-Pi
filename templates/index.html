@@ -1,487 +1,833 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Runs before CSS so the correct theme is set on first paint — no flash -->
-  <script>
-    (function () {
-      var saved = localStorage.getItem('st-theme');
-      var preferLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-      document.documentElement.setAttribute(
-        'data-theme', saved || (preferLight ? 'light' : 'dark')
-      );
-    })();
-  </script>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>SoundTouch Controller</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SoundTouch</title>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* ── Dark theme (default) ─────────────────────────────────────────── */
+    /* ── iOS semantic color tokens ───────────────────────────────────────── */
     :root {
-      --bg:      #111111;
-      --surface: #1e1e1e;
-      --surface2:#2a2a2a;
-      --border:  #333333;
-      --accent:  #00b4d8;
-      --accent2: #90e0ef;
-      --text:    #e0e0e0;
-      --muted:   #888888;
-      --green:   #4caf50;
-      --red:     #f44336;
-      --btn-accent-text: #000;
+      --bg:            #F2F2F7;
+      --surface:       #FFFFFF;
+      --surface2:      #F2F2F7;
+      --surface3:      #E5E5EA;
+      --accent:        #007AFF;
+      --red:           #FF3B30;
+      --green:         #34C759;
+      --orange:        #FF9500;
+      --label:         #000000;
+      --label2:        rgba(60,60,67,0.60);
+      --label3:        rgba(60,60,67,0.30);
+      --separator:     rgba(60,60,67,0.29);
+      --fill:          rgba(120,120,128,0.20);
+      --fill2:         rgba(120,120,128,0.16);
+      --nav-blur:      rgba(242,242,247,0.85);
+      --sheet-bg:      #FFFFFF;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg:            #000000;
+        --surface:       #1C1C1E;
+        --surface2:      #2C2C2E;
+        --surface3:      #3A3A3C;
+        --accent:        #0A84FF;
+        --red:           #FF453A;
+        --green:         #30D158;
+        --orange:        #FF9F0A;
+        --label:         #FFFFFF;
+        --label2:        rgba(235,235,245,0.60);
+        --label3:        rgba(235,235,245,0.30);
+        --separator:     rgba(84,84,88,0.65);
+        --fill:          rgba(120,120,128,0.36);
+        --fill2:         rgba(120,120,128,0.32);
+        --nav-blur:      rgba(28,28,30,0.85);
+        --sheet-bg:      #1C1C1E;
+      }
     }
 
-    /* ── Light theme ──────────────────────────────────────────────────── */
-    :root[data-theme="light"] {
-      --bg:      #f4f4f5;
-      --surface: #ffffff;
-      --surface2:#ebebec;
-      --border:  #d4d4d8;
-      --accent:  #0092b3;
-      --accent2: #006c8a;
-      --text:    #18181b;
-      --muted:   #71717a;
-      --green:   #16a34a;
-      --red:     #dc2626;
-      --btn-accent-text: #ffffff;
-    }
-
-    /* Smooth theme transitions — applied to surfaces so hover animations
-       on buttons (0.15s) still feel snappy while the theme switch (0.25s)
-       fades gracefully across cards and backgrounds.               */
-    body,
-    .now-playing, .volume-row, .bass-row, .modal, .error-banner, .toast,
-    .wifi-network-item, .wifi-message,
-    .form-group input, .form-group select {
-      transition: background-color 0.25s, border-color 0.2s, color 0.2s;
-    }
-
+    /* ── Base ────────────────────────────────────────────────────────────── */
     body {
       background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--label);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       min-height: 100vh;
-      padding: 16px;
-      max-width: 480px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Navigation bar ──────────────────────────────────────────────────── */
+    .ios-nav {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      padding: 16px 20px 12px;
+      background: var(--nav-blur);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 0.5px solid var(--separator);
+    }
+    .ios-nav-title {
+      font-size: 34px;
+      font-weight: 700;
+      letter-spacing: 0.37px;
+      line-height: 1.1;
+      color: var(--label);
+    }
+    .ios-nav-subtitle {
+      font-size: 13px;
+      color: var(--label2);
+      margin-top: 2px;
+    }
+
+    /* ── Content area ────────────────────────────────────────────────────── */
+    .ios-content {
+      padding: 20px 16px;
+      padding-bottom: calc(40px + env(safe-area-inset-bottom));
+      max-width: 430px;
       margin: 0 auto;
     }
 
-    h1 { font-size: 1.2rem; font-weight: 600; color: var(--accent2); margin-bottom: 4px; }
-    .device-name { font-size: 0.8rem; color: var(--muted); margin-bottom: 20px; }
-
-    /* Now Playing */
-    .now-playing {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 20px;
-    }
-    .now-playing .label { font-size: 0.7rem; text-transform: uppercase; color: var(--muted); letter-spacing: 1px; }
-    .now-playing .station { font-size: 1.1rem; font-weight: 600; margin-top: 4px; }
-    .now-playing .meta { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
-    .status-dot {
-      display: inline-block; width: 8px; height: 8px;
-      border-radius: 50%; margin-right: 6px;
-      background: var(--muted);
-    }
-    .status-dot.playing { background: var(--green); animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-    /* Volume */
-    .volume-row {
-      display: flex; align-items: center; gap: 10px;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 12px 16px; margin-bottom: 20px;
-    }
-    .volume-row .vol-label { font-size: 0.8rem; color: var(--muted); min-width: 60px; }
-    .volume-row input[type=range] {
-      flex: 1; accent-color: var(--accent);
-      -webkit-appearance: none; height: 4px;
-      background: var(--border); border-radius: 2px; outline: none;
-    }
-    .vol-num { font-size: 0.9rem; font-weight: 600; min-width: 30px; text-align: right; }
-
-    /* Controls */
-    .controls {
-      display: flex; gap: 10px; justify-content: center;
-      margin-bottom: 24px; flex-wrap: wrap;
-    }
-    .btn {
-      background: var(--surface2); border: 1px solid var(--border);
-      color: var(--text); border-radius: 10px; padding: 10px 16px;
-      font-size: 0.9rem; cursor: pointer;
-      transition: background-color 0.15s, border-color 0.2s, color 0.2s;
-      display: flex; align-items: center; gap: 6px;
-    }
-    .btn:hover, .btn:active { background: var(--border); }
-    /* --btn-accent-text is #000 in dark mode (bright cyan bg), #fff in light (darker bg) */
-    .btn.accent { background: var(--accent); border-color: var(--accent); color: var(--btn-accent-text); font-weight: 600; }
-    .btn.danger { border-color: var(--red); color: var(--red); }
-    .btn-icon { font-size: 1.1rem; }
-
-    /* Section header */
-    .section-label {
-      font-size: 0.7rem; text-transform: uppercase; color: var(--muted);
-      letter-spacing: 1px; margin-bottom: 10px;
-    }
-
-    /* Presets grid */
-    .presets-grid {
-      display: grid; grid-template-columns: 1fr 1fr;
-      gap: 10px; margin-bottom: 24px;
-    }
-    .preset-btn {
-      background: var(--surface); border: 2px solid var(--border);
-      border-radius: 12px; padding: 14px 12px;
-      cursor: pointer; text-align: left;
-      transition: background-color 0.25s, border-color 0.15s;
-      position: relative;
-    }
-    .preset-btn:hover { border-color: var(--accent); }
-    .preset-btn.active { border-color: var(--accent); background: rgba(0,180,216,0.08); }
-    .preset-btn .preset-num {
-      font-size: 0.65rem; color: var(--muted); font-weight: 700;
-      text-transform: uppercase; letter-spacing: 1px;
-    }
-    .preset-btn .preset-icon { font-size: 1.4rem; margin: 4px 0; display: block; }
-    .preset-btn .preset-name { font-size: 0.9rem; font-weight: 600; }
-    .preset-btn .preset-source { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
-    .preset-btn .edit-btn {
-      position: absolute; top: 8px; right: 8px;
-      background: none; border: none; color: var(--muted);
-      cursor: pointer; font-size: 0.75rem; padding: 2px 4px;
-    }
-    .preset-btn .edit-btn:hover { color: var(--text); }
-
-    /* Sources */
-    .sources-row {
-      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px;
-    }
-
-    /* Edit modal */
-    .modal-overlay {
-      display: none; position: fixed; inset: 0;
-      background: rgba(0,0,0,.75); z-index: 100;
-      align-items: center; justify-content: center;
-    }
-    .modal-overlay.open { display: flex; }
-    .modal {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 16px; padding: 24px; width: min(420px, calc(100vw - 32px));
-      max-height: 90vh; overflow-y: auto;
-    }
-    .modal h2 { font-size: 1rem; margin-bottom: 16px; }
-    .form-group { margin-bottom: 14px; }
-    .form-group label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
-    .form-group input, .form-group select {
-      width: 100%; background: var(--bg); border: 1px solid var(--border);
-      color: var(--text); border-radius: 8px; padding: 10px 12px;
-      font-size: 0.9rem; outline: none;
-    }
-    .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
-    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
-
-    .toast {
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      background: var(--surface2); border: 1px solid var(--border);
-      padding: 10px 20px; border-radius: 20px; font-size: 0.85rem;
-      opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 200;
-    }
-    .toast.show { opacity: 1; }
-
-    /* WiFi panel */
-    .wifi-section-header {
-      display: flex; align-items: center; justify-content: space-between;
-      cursor: pointer; user-select: none;
-    }
-    .wifi-network-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 12px;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; margin-bottom: 6px; cursor: pointer;
-      transition: border-color .15s;
-    }
-    .wifi-network-item:hover { border-color: var(--accent); }
-    .wifi-message {
-      border-radius: 10px; padding: 12px 14px; margin-top: 10px;
-      font-size: 0.82rem; line-height: 1.6; white-space: pre-line;
-      display: none;
-    }
-    .wifi-message.ok   { background: rgba(0,180,216,.1); border: 1px solid var(--accent); }
-    .wifi-message.fail { background: rgba(244,67,54,.1); border: 1px solid var(--red); }
-
+    /* ── Error banner ────────────────────────────────────────────────────── */
     .error-banner {
-      background: rgba(244,67,54,.15); border: 1px solid var(--red);
-      color: var(--red); border-radius: 10px; padding: 10px 14px;
-      margin-bottom: 16px; font-size: 0.85rem; display: none;
+      background: rgba(255,59,48,0.12);
+      border: 0.5px solid var(--red);
+      color: var(--red);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+      font-size: 15px;
+      display: none;
     }
     .error-banner.show { display: block; }
 
-    /* Bass slider */
-    .bass-row {
-      display: flex; align-items: center; gap: 10px;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 12px 16px; margin-bottom: 20px;
+    /* ── Now Playing card ────────────────────────────────────────────────── */
+    .ios-now-playing {
+      background: var(--surface);
+      border-radius: 16px;
+      padding: 18px 16px;
+      margin-bottom: 12px;
     }
-    .bass-row .vol-label { font-size: 0.8rem; color: var(--muted); min-width: 60px; }
-    .bass-row input[type=range] {
-      flex: 1; accent-color: var(--accent2);
-      -webkit-appearance: none; height: 4px;
-      background: var(--border); border-radius: 2px; outline: none;
+    .ios-now-playing .np-label {
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--label2);
+      margin-bottom: 8px;
+    }
+    .ios-now-playing .np-station-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-dot {
+      flex-shrink: 0;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--label3);
+    }
+    .status-dot.playing {
+      background: var(--green);
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .np-station {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--label);
+      line-height: 1.3;
+    }
+    .np-meta {
+      font-size: 15px;
+      color: var(--label2);
+      margin-top: 4px;
+      padding-left: 16px;
     }
 
-    footer { text-align: center; font-size: 0.7rem; color: var(--muted); margin-top: 32px; padding-bottom: 16px; }
-
-    /* ── Theme toggle button ─────────────────────────────────────────── */
-    .theme-toggle {
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      color: var(--muted);
+    /* ── Slider rows (volume + bass) ─────────────────────────────────────── */
+    .ios-slider-row {
+      background: var(--surface);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .slider-label {
+      font-size: 13px;
+      color: var(--label2);
+      min-width: 66px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .slider-label svg { color: var(--label2); flex-shrink: 0; }
+    input[type=range] {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 4px;
+      border-radius: 2px;
+      background: linear-gradient(
+        to right,
+        var(--accent) 0%,
+        var(--accent) var(--fill-pct, 30%),
+        var(--fill) var(--fill-pct, 30%),
+        var(--fill) 100%
+      );
+      outline: none;
       cursor: pointer;
-      font-size: 1rem;
-      line-height: 1;
-      padding: 5px 11px;
-      transition: border-color 0.2s, color 0.2s, background-color 0.15s;
     }
-    .theme-toggle:hover { border-color: var(--accent); color: var(--text); }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--surface);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25), 0 0 0 0.5px rgba(0,0,0,0.08);
+      cursor: pointer;
+    }
+    #bass-slider {
+      background: linear-gradient(
+        to right,
+        var(--accent) 0%,
+        var(--accent) var(--fill-pct, 50%),
+        var(--fill) var(--fill-pct, 50%),
+        var(--fill) 100%
+      );
+    }
+    .slider-num {
+      font-size: 15px;
+      font-weight: 500;
+      min-width: 28px;
+      text-align: right;
+      color: var(--label2);
+    }
+
+    /* ── Transport controls ──────────────────────────────────────────────── */
+    .ios-transport {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      padding: 8px 0 24px;
+    }
+    .ios-ctrl-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--fill);
+      border: none;
+      cursor: pointer;
+      color: var(--label);
+      transition: background 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .ios-ctrl-btn:active { transform: scale(0.93); background: var(--fill2); }
+    .ios-ctrl-btn svg { width: 20px; height: 20px; }
+    .ios-ctrl-btn.primary {
+      width: 60px;
+      height: 60px;
+      background: var(--accent);
+      color: #fff;
+    }
+    .ios-ctrl-btn.primary svg { width: 24px; height: 24px; }
+    .ios-ctrl-btn.primary:active { background: var(--accent); filter: brightness(0.85); }
+
+    /* ── iOS section / list group ────────────────────────────────────────── */
+    .ios-section {
+      margin-bottom: 28px;
+    }
+    .ios-section-header {
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--label2);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0 16px 6px;
+    }
+    .ios-section-footer {
+      font-size: 13px;
+      color: var(--label2);
+      padding: 6px 16px 0;
+      line-height: 1.5;
+    }
+    .ios-list-group {
+      background: var(--surface);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .ios-list-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 50px;
+      padding: 12px 16px;
+      background: var(--surface);
+    }
+    .ios-list-item.tappable {
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.1s;
+    }
+    .ios-list-item.tappable:active { background: var(--fill); }
+    button.ios-list-item {
+      width: 100%;
+      border: none;
+      text-align: left;
+      font-family: inherit;
+      font-size: inherit;
+    }
+    .ios-item-icon {
+      flex-shrink: 0;
+      width: 30px;
+      height: 30px;
+      border-radius: 7px;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+    .ios-item-icon svg { width: 16px; height: 16px; }
+    .ios-item-icon.red    { background: var(--red); }
+    .ios-item-icon.green  { background: var(--green); }
+    .ios-item-icon.orange { background: var(--orange); }
+    .ios-item-icon.gray   { background: var(--fill); color: var(--label2); }
+    .ios-item-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .ios-item-title {
+      display: block;
+      font-size: 17px;
+      color: var(--label);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ios-item-detail {
+      display: block;
+      font-size: 13px;
+      color: var(--label2);
+      margin-top: 1px;
+    }
+    .ios-item-value {
+      font-size: 15px;
+      color: var(--label2);
+      flex-shrink: 0;
+    }
+    .ios-chevron {
+      flex-shrink: 0;
+      color: var(--label3);
+      transition: transform 0.25s;
+    }
+    .ios-chevron svg { width: 16px; height: 16px; display: block; }
+    .ios-chevron.open { transform: rotate(90deg); }
+    .ios-separator {
+      height: 0.5px;
+      background: var(--separator);
+      margin-left: 58px;
+    }
+    .ios-separator.full { margin-left: 0; }
+
+    /* ── Presets grid ────────────────────────────────────────────────────── */
+    .presets-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .preset-btn {
+      background: var(--surface);
+      border: 1.5px solid transparent;
+      border-radius: 14px;
+      padding: 14px 12px;
+      cursor: pointer;
+      text-align: left;
+      position: relative;
+      transition: border-color 0.2s, background 0.2s;
+      -webkit-tap-highlight-color: transparent;
+      min-height: 90px;
+      display: flex;
+      flex-direction: column;
+    }
+    .preset-btn:active { background: var(--fill); }
+    .preset-btn.active {
+      border-color: var(--accent);
+      background: rgba(10,132,255,0.08);
+    }
+    .preset-num {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--label2);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .preset-icon {
+      font-size: 28px;
+      margin: 6px 0 4px;
+      display: block;
+      line-height: 1;
+    }
+    .preset-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--label);
+      line-height: 1.25;
+    }
+    .preset-edit-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: none;
+      border: none;
+      color: var(--label3);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .preset-edit-btn svg { width: 14px; height: 14px; }
+    .preset-edit-btn:active { background: var(--fill); color: var(--label2); }
+
+    /* ── Full-width list button (Sync) ───────────────────────────────────── */
+    .ios-action-row {
+      background: var(--surface);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 28px;
+    }
+
+    /* ── Bottom sheet ────────────────────────────────────────────────────── */
+    .ios-sheet-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 100;
+      align-items: flex-end;
+    }
+    .ios-sheet-overlay.open { display: flex; }
+    .ios-sheet {
+      background: var(--sheet-bg);
+      border-radius: 20px 20px 0 0;
+      padding: 8px 20px calc(32px + env(safe-area-inset-bottom));
+      width: 100%;
+      max-height: 88vh;
+      overflow-y: auto;
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.32,0.72,0,1);
+    }
+    .ios-sheet-overlay.open .ios-sheet { transform: translateY(0); }
+    .ios-sheet-handle {
+      width: 36px;
+      height: 5px;
+      background: var(--label3);
+      border-radius: 3px;
+      margin: 0 auto 20px;
+    }
+    .ios-sheet-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--label);
+      margin-bottom: 20px;
+    }
+
+    /* ── Form elements ───────────────────────────────────────────────────── */
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--label2);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .form-group input {
+      width: 100%;
+      background: var(--fill);
+      border: none;
+      color: var(--label);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 17px;
+      font-family: inherit;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .form-group input:focus {
+      background: var(--fill2);
+      box-shadow: 0 0 0 2px var(--accent);
+    }
+    .form-hint {
+      font-size: 13px;
+      color: var(--label2);
+      line-height: 1.5;
+      margin-top: 8px;
+    }
+    .form-hint a { color: var(--accent); text-decoration: none; }
+
+    /* ── iOS buttons ─────────────────────────────────────────────────────── */
+    .ios-btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .ios-btn {
+      flex: 1;
+      min-height: 50px;
+      border-radius: 12px;
+      font-size: 17px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: none;
+      transition: filter 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .ios-btn:active { filter: brightness(0.88); }
+    .ios-btn.primary { background: var(--accent); color: #fff; }
+    .ios-btn.plain   { background: var(--fill); color: var(--accent); }
+    .ios-btn.danger  { background: rgba(255,59,48,0.12); color: var(--red); }
+
+    /* ── Toast ───────────────────────────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: calc(32px + env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(50,50,50,0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 15px;
+      font-weight: 500;
+      opacity: 0;
+      transition: opacity 0.25s;
+      pointer-events: none;
+      z-index: 200;
+      white-space: nowrap;
+    }
+    @media (prefers-color-scheme: dark) {
+      .toast { background: rgba(90,90,90,0.88); }
+    }
+    .toast.show { opacity: 1; }
+
+    /* ── WiFi network list items ─────────────────────────────────────────── */
+    .wifi-network-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 50px;
+      padding: 12px 16px;
+      background: var(--surface);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.1s;
+    }
+    .wifi-network-row:active { background: var(--fill); }
+    .wifi-signal {
+      font-size: 12px;
+      font-family: monospace;
+      color: var(--label2);
+      min-width: 32px;
+    }
+    .wifi-message {
+      font-size: 15px;
+      line-height: 1.5;
+      white-space: pre-line;
+      padding: 12px 16px;
+      display: none;
+    }
+    .wifi-message.ok   { color: var(--accent); }
+    .wifi-message.fail { color: var(--red); }
+
+    /* ── Sync result ─────────────────────────────────────────────────────── */
+    .sync-result {
+      font-size: 13px;
+      color: var(--label2);
+      padding: 6px 16px 0;
+      line-height: 1.5;
+    }
+
+    /* ── Reboot message ──────────────────────────────────────────────────── */
+    .reboot-msg {
+      font-size: 15px;
+      color: var(--label2);
+      line-height: 1.6;
+      white-space: pre-line;
+      padding: 8px 16px 0;
+      text-align: center;
+      display: none;
+    }
   </style>
 </head>
 <body>
 
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-    <h1>🔊 SoundTouch</h1>
-    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light / dark mode">🌙</button>
-  </div>
-  <div class="device-name" id="device-name">Connecting…</div>
+  <!-- Navigation bar -->
+  <nav class="ios-nav">
+    <div class="ios-nav-title">SoundTouch</div>
+    <div class="ios-nav-subtitle" id="device-name">Connecting…</div>
+  </nav>
 
-  <div class="error-banner" id="error-banner"></div>
+  <div class="ios-content">
 
-  <!-- Now Playing -->
-  <div class="now-playing">
-    <div class="label">Now Playing</div>
-    <div class="station">
-      <span class="status-dot" id="status-dot"></span>
-      <span id="np-station">—</span>
+    <div class="error-banner" id="error-banner"></div>
+
+    <!-- Now Playing -->
+    <div class="ios-now-playing">
+      <div class="np-label">Now Playing</div>
+      <div class="np-station-row">
+        <span class="status-dot" id="status-dot"></span>
+        <span class="np-station" id="np-station">—</span>
+      </div>
+      <div class="np-meta" id="np-meta"></div>
     </div>
-    <div class="meta" id="np-meta"></div>
-  </div>
 
-  <!-- Volume -->
-  <div class="volume-row">
-    <span class="vol-label">🔈 Volume</span>
-    <input type="range" id="vol-slider" min="0" max="100" value="30">
-    <span class="vol-num" id="vol-num">—</span>
-  </div>
-
-  <!-- Bass (shown if supported) -->
-  <div class="bass-row" id="bass-row" style="display:none">
-    <span class="vol-label">🎚 Bass</span>
-    <input type="range" id="bass-slider" min="-9" max="9" value="0">
-    <span class="vol-num" id="bass-num">0</span>
-  </div>
-
-  <!-- Transport Controls -->
-  <div class="controls">
-    <button class="btn" onclick="control('power')" title="Power">
-      <span class="btn-icon">⏻</span>
-    </button>
-    <button class="btn" onclick="control('prev')">
-      <span class="btn-icon">⏮</span>
-    </button>
-    <button class="btn accent" onclick="control('play_pause')">
-      <span class="btn-icon" id="play-icon">▶ / ⏸</span>
-    </button>
-    <button class="btn" onclick="control('next')">
-      <span class="btn-icon">⏭</span>
-    </button>
-    <button class="btn" onclick="control('mute')" title="Mute">
-      <span class="btn-icon">🔇</span>
-    </button>
-  </div>
-
-  <!-- Virtual Presets -->
-  <div class="section-label">Internet Radio Presets</div>
-  <div class="presets-grid" id="presets-grid"></div>
-
-  <!-- Sync hardware presets -->
-  <div style="margin-bottom:24px">
-    <button class="btn" id="sync-btn" onclick="syncHardwarePresets()" style="width:100%;justify-content:center;gap:8px">
-      <span>📲</span> Sync to Device Buttons
-    </button>
-    <div style="font-size:0.72rem;color:var(--muted);margin-top:6px;text-align:center">
-      Writes your presets into the 6 physical buttons on the speaker
+    <!-- Volume -->
+    <div class="ios-slider-row">
+      <span class="slider-label"><i data-lucide="volume-2"></i> Volume</span>
+      <input type="range" id="vol-slider" min="0" max="100" value="30" style="--fill-pct:30%">
+      <span class="slider-num" id="vol-num">—</span>
     </div>
-    <div id="sync-result" style="font-size:0.75rem;color:var(--muted);margin-top:8px;display:none"></div>
-  </div>
 
-  <!-- Other Sources -->
-  <div class="section-label">Other Sources</div>
-  <div class="sources-row">
-    <button class="btn" onclick="control('aux')">AUX Input</button>
-    <button class="btn" onclick="control('bluetooth')">Bluetooth</button>
-  </div>
+    <!-- Bass (shown if device supports it) -->
+    <div class="ios-slider-row" id="bass-row" style="display:none">
+      <span class="slider-label"><i data-lucide="sliders-horizontal"></i> Bass</span>
+      <input type="range" id="bass-slider" min="-9" max="9" value="0" style="--fill-pct:50%">
+      <span class="slider-num" id="bass-num">0</span>
+    </div>
 
-  <!-- Edit Preset Modal -->
-  <div class="modal-overlay" id="modal-overlay">
-    <div class="modal">
-      <h2>Edit Preset <span id="modal-preset-num"></span></h2>
+    <!-- Transport controls -->
+    <div class="ios-transport">
+      <button class="ios-ctrl-btn" onclick="control('power')" title="Power">
+        <i data-lucide="power"></i>
+      </button>
+      <button class="ios-ctrl-btn" onclick="control('prev')" title="Previous">
+        <i data-lucide="skip-back"></i>
+      </button>
+      <button class="ios-ctrl-btn primary" onclick="control('play_pause')" title="Play / Pause">
+        <i data-lucide="play"></i>
+      </button>
+      <button class="ios-ctrl-btn" onclick="control('next')" title="Next">
+        <i data-lucide="skip-forward"></i>
+      </button>
+      <button class="ios-ctrl-btn" onclick="control('mute')" title="Mute">
+        <i data-lucide="volume-x"></i>
+      </button>
+    </div>
+
+    <!-- Radio Presets -->
+    <div class="ios-section">
+      <div class="ios-section-header">Radio Presets</div>
+      <div class="presets-grid" id="presets-grid"></div>
+    </div>
+
+    <!-- Sync to device buttons -->
+    <div class="ios-action-row">
+      <button class="ios-list-item tappable" id="sync-btn" onclick="syncHardwarePresets()" style="width:100%">
+        <span class="ios-item-icon"><i data-lucide="smartphone"></i></span>
+        <div class="ios-item-content">
+          <span class="ios-item-title">Sync to Device Buttons</span>
+          <span class="ios-item-detail">Writes presets into the 6 physical buttons</span>
+        </div>
+        <span class="ios-chevron"><i data-lucide="chevron-right"></i></span>
+      </button>
+    </div>
+    <div class="sync-result" id="sync-result" style="display:none;margin-top:-20px;margin-bottom:28px"></div>
+
+    <!-- Other Sources -->
+    <div class="ios-section">
+      <div class="ios-section-header">Other Sources</div>
+      <div class="ios-list-group">
+        <div class="ios-list-item tappable" onclick="control('aux')">
+          <span class="ios-item-icon gray"><i data-lucide="plug"></i></span>
+          <div class="ios-item-content">
+            <span class="ios-item-title">AUX Input</span>
+          </div>
+          <span class="ios-chevron"><i data-lucide="chevron-right"></i></span>
+        </div>
+        <div class="ios-separator"></div>
+        <div class="ios-list-item tappable" onclick="control('bluetooth')">
+          <span class="ios-item-icon" style="background:#5856D6"><i data-lucide="bluetooth"></i></span>
+          <div class="ios-item-content">
+            <span class="ios-item-title">Bluetooth</span>
+          </div>
+          <span class="ios-chevron"><i data-lucide="chevron-right"></i></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- WiFi Settings -->
+    <div class="ios-section">
+      <div class="ios-list-group">
+        <!-- Header row — always visible -->
+        <div class="ios-list-item tappable" onclick="toggleWifi()">
+          <span class="ios-item-icon"><i data-lucide="wifi"></i></span>
+          <div class="ios-item-content">
+            <span class="ios-item-title">Wi-Fi</span>
+          </div>
+          <span class="ios-item-value" id="wifi-ssid-label">—</span>
+          <span class="ios-chevron" id="wifi-arrow"><i data-lucide="chevron-right"></i></span>
+        </div>
+
+        <!-- Expandable panel -->
+        <div id="wifi-panel" style="display:none">
+          <div class="ios-separator full"></div>
+
+          <!-- Current connection detail -->
+          <div style="padding:10px 16px 10px 58px">
+            <span class="ios-item-detail" id="wifi-detail-label"></span>
+          </div>
+
+          <div class="ios-separator full"></div>
+
+          <!-- Scan button -->
+          <button class="ios-list-item tappable" id="wifi-scan-btn" onclick="wifiScan()" style="width:100%">
+            <span class="ios-item-icon gray"><i data-lucide="search"></i></span>
+            <div class="ios-item-content">
+              <span class="ios-item-title">Scan for Networks</span>
+            </div>
+          </button>
+
+          <!-- Scanned network list -->
+          <div id="wifi-network-list" style="display:none"></div>
+
+          <!-- Connect form -->
+          <div id="wifi-connect-form" style="display:none">
+            <div class="ios-separator full"></div>
+            <div style="padding:14px 16px">
+              <div class="ios-item-detail" style="margin-bottom:10px">
+                Connecting to <strong id="wifi-selected-name"></strong>
+              </div>
+              <div id="wifi-pw-group">
+                <input type="password" id="wifi-pw-input" placeholder="Password"
+                       style="width:100%;background:var(--fill);border:none;color:var(--label);border-radius:10px;padding:12px 14px;font-size:17px;font-family:inherit;outline:none;-webkit-appearance:none">
+              </div>
+              <div style="display:flex;gap:10px;margin-top:10px">
+                <button class="ios-btn plain" onclick="wifiCancelConnect()" style="flex:1;min-height:44px;font-size:15px">Cancel</button>
+                <button class="ios-btn primary" onclick="wifiDoConnect()" style="flex:1;min-height:44px;font-size:15px">Connect</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Status message -->
+          <div id="wifi-msg" class="wifi-message"></div>
+
+          <div class="ios-separator full"></div>
+
+          <!-- Hotspot toggle -->
+          <button class="ios-list-item tappable" id="wifi-hotspot-btn" onclick="wifiToggleHotspot()" style="width:100%">
+            <span class="ios-item-icon orange"><i data-lucide="radio"></i></span>
+            <div class="ios-item-content">
+              <span class="ios-item-title">Enable Setup Hotspot</span>
+            </div>
+          </button>
+        </div>
+      </div>
+      <div class="ios-section-footer">
+        Creates "SoundTouch-Setup" so you can reconfigure Wi-Fi from any device
+      </div>
+    </div>
+
+    <!-- System -->
+    <div class="ios-section">
+      <div class="ios-section-header">System</div>
+      <div class="ios-list-group">
+        <button class="ios-list-item tappable" id="reboot-btn" onclick="rebootSystem()" style="width:100%">
+          <span class="ios-item-icon red"><i data-lucide="rotate-cw"></i></span>
+          <div class="ios-item-content">
+            <span class="ios-item-title" style="color:var(--red)">Reboot Pi</span>
+          </div>
+        </button>
+      </div>
+      <div class="reboot-msg" id="reboot-msg"></div>
+    </div>
+
+  </div><!-- .ios-content -->
+
+  <!-- Bottom sheet — preset editor -->
+  <div class="ios-sheet-overlay" id="modal-overlay">
+    <div class="ios-sheet">
+      <div class="ios-sheet-handle"></div>
+      <div class="ios-sheet-title">Edit Preset <span id="modal-preset-num"></span></div>
 
       <div class="form-group">
         <label>Station Name</label>
-        <input type="text" id="edit-name" placeholder="e.g. BBC Radio 4">
+        <input type="text" id="edit-name" placeholder="e.g. BBC Radio 4" autocomplete="off">
       </div>
       <div class="form-group">
         <label>Stream URL</label>
-        <input type="url" id="edit-stream-url" placeholder="https://stream.example.com/radio.mp3">
+        <input type="url" id="edit-stream-url" placeholder="https://stream.example.com/radio.mp3" autocomplete="off">
       </div>
       <div class="form-group">
         <label>Icon (emoji)</label>
-        <input type="text" id="edit-icon" placeholder="📻" maxlength="4">
+        <input type="text" id="edit-icon" placeholder="📻" maxlength="4" autocomplete="off">
       </div>
 
-      <div style="font-size:0.75rem;color:var(--muted);margin-top:8px">
-        Paste any public <strong>HTTP or HTTPS MP3/AAC stream URL</strong>. Good sources:
-        <a href="https://www.radio-browser.info" target="_blank" style="color:var(--accent)">radio-browser.info</a>
-        · BBC streams use <code>http://stream.live.vc.bbcmedia.co.uk/bbc_radio_four_fm</code> format.
-      </div>
+      <p class="form-hint">
+        Paste any public HTTP or HTTPS MP3/AAC stream URL.<br>
+        Find streams at <a href="https://www.radio-browser.info" target="_blank">radio-browser.info</a>
+      </p>
 
-      <div class="modal-actions">
-        <button class="btn" onclick="closeModal()">Cancel</button>
-        <button class="btn accent" onclick="savePreset()">Save & Play</button>
+      <div class="ios-btn-row">
+        <button class="ios-btn plain" onclick="closeModal()">Cancel</button>
+        <button class="ios-btn primary" onclick="savePreset()">Save &amp; Play</button>
       </div>
     </div>
   </div>
 
   <div class="toast" id="toast"></div>
 
-  <!-- ── WiFi Settings (collapsible) ──────────────────────────────────── -->
-  <div style="margin-bottom: 24px">
-    <div class="section-label wifi-section-header" onclick="toggleWifi()">
-      <span>📶 WiFi Settings</span>
-      <span id="wifi-arrow">▶</span>
-    </div>
-
-    <div id="wifi-panel" style="display:none; margin-top:10px">
-
-      <!-- Current status card -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px">
-        <div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Current WiFi</div>
-        <div style="font-size:1rem;font-weight:600;margin-top:4px" id="wifi-ssid-label">—</div>
-        <div style="font-size:0.75rem;color:var(--muted);margin-top:2px" id="wifi-detail-label"></div>
-      </div>
-
-      <!-- Scan button -->
-      <button class="btn" id="wifi-scan-btn" onclick="wifiScan()"
-              style="width:100%;justify-content:center;margin-bottom:10px">
-        🔍 Scan for Networks
-      </button>
-
-      <!-- Scanned network list (hidden until scan completes) -->
-      <div id="wifi-network-list" style="display:none;margin-bottom:10px"></div>
-
-      <!-- Connect form (hidden until a network is selected) -->
-      <div id="wifi-connect-form"
-           style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px">
-        <div style="font-size:0.8rem;color:var(--muted);margin-bottom:10px">
-          Connecting to: <strong id="wifi-selected-name"></strong>
-        </div>
-        <div class="form-group" id="wifi-pw-group">
-          <label>Password</label>
-          <input type="password" id="wifi-pw-input" placeholder="WiFi password"
-                 style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:0.9rem;outline:none">
-        </div>
-        <div style="display:flex;gap:8px;margin-top:4px">
-          <button class="btn" onclick="wifiCancelConnect()" style="flex:1;justify-content:center">Cancel</button>
-          <button class="btn accent" onclick="wifiDoConnect()" style="flex:1;justify-content:center">Connect</button>
-        </div>
-      </div>
-
-      <!-- Message / instructions box -->
-      <div id="wifi-msg" class="wifi-message"></div>
-
-      <!-- Hotspot toggle -->
-      <button class="btn" id="wifi-hotspot-btn" onclick="wifiToggleHotspot()"
-              style="width:100%;justify-content:center;margin-top:10px">
-        📡 Enable Setup Hotspot
-      </button>
-      <div style="font-size:0.72rem;color:var(--muted);text-align:center;margin-top:6px">
-        Creates "SoundTouch-Setup" so you can reconfigure WiFi from any phone or laptop
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ── System ────────────────────────────────────────────────────────── -->
-  <div style="margin-bottom:24px">
-    <div class="section-label">System</div>
-    <button class="btn" id="reboot-btn" onclick="rebootSystem()"
-            style="width:100%;justify-content:center">
-      🔄 Reboot Pi
-    </button>
-    <div id="reboot-msg"
-         style="display:none;font-size:0.8rem;color:var(--muted);
-                margin-top:8px;text-align:center;line-height:1.6;white-space:pre-line">
-    </div>
-  </div>
-
-  <footer>SoundTouch Pi Controller · <span id="device-host"></span></footer>
-
 <script>
-  let presets = [];
-  let editingId = null;
-  let volTimer = null;
-  let bassTimer = null;
-  let bassAvailable = false;
-  let bassMin = -9, bassMax = 9;
+  let presets          = [];
+  let editingId        = null;
+  let volTimer         = null;
+  let bassTimer        = null;
+  let bassAvailable    = false;
+  let bassMin          = -9, bassMax = 9;
+  let activePresetId   = null;
+  let wifiPanelOpen    = false;
+  let wifiHotspotMode  = false;
+  let wifiSelectedSsid = null;
+  let wifiSelectedOpen = false;
+  let _rebootArmed     = false;
+  let _rebootTimer     = null;
 
-  // ── init ────────────────────────────────────────────────────────────────
-
-  let activePresetId = null;  // tracks which preset is currently playing
-
-  // ── Theme ────────────────────────────────────────────────────────────────
-
-  function _applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    // 🌙 shown when dark (clicking will switch to light), ☀️ when light
-    document.getElementById('theme-toggle').textContent = theme === 'dark' ? '☀️' : '🌙';
-    document.getElementById('theme-toggle').title =
-      theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
-  }
-
-  function toggleTheme() {
-    const current = document.documentElement.getAttribute('data-theme') || 'dark';
-    const next    = current === 'dark' ? 'light' : 'dark';
-    _applyTheme(next);
-    localStorage.setItem('st-theme', next);
-  }
-
-  function initTheme() {
-    // data-theme was already set by the inline head script; just sync the button
-    const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-    _applyTheme(theme);
-  }
+  // ── init ──────────────────────────────────────────────────────────────────
 
   async function init() {
-    initTheme();
     await Promise.all([loadStatus(), loadPresets(), loadBass()]);
     loadInfo();
     connectSSE();
-    // Slow fallback poll — SSE handles real-time, this is a safety net
     setInterval(loadStatus, 30000);
+    lucide.createIcons();
   }
 
-  // ── API helpers ─────────────────────────────────────────────────────────
+  // ── API helper ────────────────────────────────────────────────────────────
 
   async function api(path, opts = {}) {
     const r = await fetch(path, {
       headers: { "Content-Type": "application/json" },
       ...opts,
     });
-    // Always parse as text first so a non-JSON error page (404, 500 HTML)
-    // gives a readable message instead of a cryptic browser JSON-parse error.
     const text = await r.text();
     try {
       return JSON.parse(text);
@@ -504,24 +850,19 @@
     setTimeout(() => t.classList.remove("show"), 2000);
   }
 
-  // ── SSE — real-time push from server ────────────────────────────────────
+  // ── SSE ───────────────────────────────────────────────────────────────────
 
   function connectSSE() {
     const es = new EventSource("/api/events");
-
     es.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       if (msg.type === "nowPlaying") applyNowPlaying(msg.data);
       if (msg.type === "volume")     applyVolume(msg.data);
       if (msg.type === "error")      showError(msg.data.message);
     };
-
-    es.onerror = () => {
-      // Browser auto-reconnects EventSource; nothing needed here
-    };
   }
 
-  // ── now-playing rendering ────────────────────────────────────────────────
+  // ── Now playing ───────────────────────────────────────────────────────────
 
   function applyNowPlaying(np) {
     const isPlaying = np.status === "PLAY_STATE" || np.status === "BUFFERING_STATE";
@@ -529,7 +870,6 @@
     document.getElementById("status-dot").className =
       "status-dot" + (isPlaying ? " playing" : "");
 
-    // Station name — prefer our saved name (shown by server), fall back to device's
     const station = np.station || np.content_item?.name || "—";
     const icon    = np.icon ? np.icon + " " : "";
     document.getElementById("np-station").textContent = icon + station;
@@ -538,7 +878,6 @@
     document.getElementById("np-meta").textContent =
       parts.length ? parts.join(" — ") : "";
 
-    // Highlight the active preset card
     if (np.preset_id) activePresetId = np.preset_id;
     presets.forEach(p => {
       const el = document.getElementById(`preset-btn-${p.id}`);
@@ -548,12 +887,14 @@
 
   function applyVolume(vol) {
     if (!volTimer) {
-      document.getElementById("vol-slider").value = vol.actual;
+      const slider = document.getElementById("vol-slider");
+      slider.value = vol.actual;
+      slider.style.setProperty("--fill-pct", vol.actual + "%");
       document.getElementById("vol-num").textContent = vol.actual;
     }
   }
 
-  // ── status (initial load + fallback poll) ────────────────────────────────
+  // ── Status ────────────────────────────────────────────────────────────────
 
   async function loadStatus() {
     const data = await api("/api/status");
@@ -567,10 +908,9 @@
     if (!data.ok) return;
     document.getElementById("device-name").textContent =
       `${data.info.name} · ${data.info.type}`;
-    document.getElementById("device-host").textContent = data.host;
   }
 
-  // ── presets ─────────────────────────────────────────────────────────────
+  // ── Presets ───────────────────────────────────────────────────────────────
 
   const FALLBACK_PRESETS = Array.from({length: 6}, (_, i) => ({
     id: i + 1, name: `Preset ${i + 1}`, stream_url: "", icon: "📻"
@@ -590,28 +930,34 @@
     const grid = document.getElementById("presets-grid");
     grid.innerHTML = "";
     presets.forEach(p => {
-      const div = document.createElement("div");
-      div.className = "preset-btn";
-      div.id = `preset-btn-${p.id}`;
-      div.innerHTML = `
-        <div class="preset-num">Preset ${p.id}</div>
+      const btn = document.createElement("button");
+      btn.className = "preset-btn";
+      btn.id = `preset-btn-${p.id}`;
+      if (p.id === activePresetId) btn.classList.add("active");
+      btn.innerHTML = `
+        <span class="preset-num">Preset ${p.id}</span>
         <span class="preset-icon">${p.icon || "📻"}</span>
-        <div class="preset-name">${esc(p.name)}</div>
-        <button class="edit-btn" onclick="openEdit(${p.id}, event)" title="Edit">✏️</button>
+        <span class="preset-name">${esc(p.name)}</span>
+        <button class="preset-edit-btn" data-id="${p.id}" title="Edit">
+          <i data-lucide="pencil"></i>
+        </button>
       `;
-      div.addEventListener("click", e => {
-        if (e.target.closest(".edit-btn")) return;
-        playPreset(p.id);
+      btn.addEventListener("click", e => {
+        if (e.target.closest(".preset-edit-btn")) {
+          openEdit(p.id, e);
+        } else {
+          playPreset(p.id);
+        }
       });
-      grid.appendChild(div);
+      grid.appendChild(btn);
     });
+    lucide.createIcons();
   }
 
   async function playPreset(id) {
     const p = presets.find(x => x.id === id);
-    if (!p?.stream_url) { toast("Preset not configured — tap ✏️ to set a stream URL"); return; }
+    if (!p?.stream_url) { toast("Tap ✏️ to configure this preset"); return; }
     activePresetId = id;
-    // Immediately highlight the tapped preset
     presets.forEach(q => {
       const el = document.getElementById(`preset-btn-${q.id}`);
       if (el) el.classList.toggle("active", q.id === id);
@@ -624,21 +970,23 @@
     else setTimeout(loadStatus, 1500);
   }
 
-  // ── volume ──────────────────────────────────────────────────────────────
+  // ── Volume ────────────────────────────────────────────────────────────────
 
   document.getElementById("vol-slider").addEventListener("input", e => {
-    document.getElementById("vol-num").textContent = e.target.value;
+    const val = e.target.value;
+    document.getElementById("vol-num").textContent = val;
+    e.target.style.setProperty("--fill-pct", val + "%");
     clearTimeout(volTimer);
     volTimer = setTimeout(async () => {
       await api("/api/volume", {
         method: "POST",
-        body: JSON.stringify({ level: parseInt(e.target.value) }),
+        body: JSON.stringify({ level: parseInt(val) }),
       });
       volTimer = null;
     }, 300);
   });
 
-  // ── bass ────────────────────────────────────────────────────────────────
+  // ── Bass ──────────────────────────────────────────────────────────────────
 
   async function loadBass() {
     const data = await api("/api/bass");
@@ -646,28 +994,33 @@
     bassAvailable = true;
     bassMin = data.caps.min;
     bassMax = data.caps.max;
-    const row = document.getElementById("bass-row");
+    const row    = document.getElementById("bass-row");
     const slider = document.getElementById("bass-slider");
-    slider.min = bassMin;
-    slider.max = bassMax;
+    slider.min   = bassMin;
+    slider.max   = bassMax;
     slider.value = data.level ?? 0;
+    const pct = ((data.level - bassMin) / (bassMax - bassMin) * 100).toFixed(1) + "%";
+    slider.style.setProperty("--fill-pct", pct);
     document.getElementById("bass-num").textContent = data.level ?? 0;
     row.style.display = "flex";
   }
 
   document.getElementById("bass-slider").addEventListener("input", e => {
-    document.getElementById("bass-num").textContent = e.target.value;
+    const val = e.target.value;
+    document.getElementById("bass-num").textContent = val;
+    const pct = ((val - bassMin) / (bassMax - bassMin) * 100).toFixed(1) + "%";
+    e.target.style.setProperty("--fill-pct", pct);
     clearTimeout(bassTimer);
     bassTimer = setTimeout(async () => {
       await api("/api/bass", {
         method: "POST",
-        body: JSON.stringify({ level: parseInt(e.target.value) }),
+        body: JSON.stringify({ level: parseInt(val) }),
       });
       bassTimer = null;
     }, 400);
   });
 
-  // ── controls ─────────────────────────────────────────────────────────────
+  // ── Transport controls ────────────────────────────────────────────────────
 
   async function control(action) {
     const data = await api(`/api/control/${action}`, { method: "POST" });
@@ -675,16 +1028,16 @@
     else setTimeout(loadStatus, 800);
   }
 
-  // ── edit modal ───────────────────────────────────────────────────────────
+  // ── Edit modal (bottom sheet) ─────────────────────────────────────────────
 
   function openEdit(id, e) {
     e.stopPropagation();
     editingId = id;
     const p = presets.find(x => x.id === id) || {};
     document.getElementById("modal-preset-num").textContent = id;
-    document.getElementById("edit-name").value = p.name || "";
+    document.getElementById("edit-name").value       = p.name       || "";
     document.getElementById("edit-stream-url").value = p.stream_url || "";
-    document.getElementById("edit-icon").value = p.icon || "📻";
+    document.getElementById("edit-icon").value       = p.icon       || "📻";
     document.getElementById("modal-overlay").classList.add("open");
   }
 
@@ -699,12 +1052,11 @@
 
   async function savePreset() {
     const payload = {
-      name: document.getElementById("edit-name").value.trim(),
+      name:       document.getElementById("edit-name").value.trim(),
       stream_url: document.getElementById("edit-stream-url").value.trim(),
-      icon: document.getElementById("edit-icon").value.trim() || "📻",
+      icon:       document.getElementById("edit-icon").value.trim() || "📻",
     };
     if (!payload.name) { alert("Enter a station name"); return; }
-
     const data = await api(`/api/preset/${editingId}/save`, {
       method: "POST",
       body: JSON.stringify(payload),
@@ -715,108 +1067,72 @@
     if (payload.stream_url) playPreset(editingId);
   }
 
-  // ── sync hardware presets ─────────────────────────────────────────────────
+  // ── Sync hardware presets ─────────────────────────────────────────────────
 
   async function syncHardwarePresets() {
-    const btn = document.getElementById("sync-btn");
+    const btn      = document.getElementById("sync-btn");
     const resultEl = document.getElementById("sync-result");
     btn.disabled = true;
-    btn.textContent = "Syncing…";
     resultEl.style.display = "none";
     try {
       const data = await api("/api/sync-hardware-presets", { method: "POST" });
-      if (!data.ok) {
-        showError(data.error || "Sync failed");
-        return;
-      }
+      if (!data.ok) { showError(data.error || "Sync failed"); return; }
       const ok  = data.results.filter(r => r.ok).length;
       const bad = data.results.filter(r => !r.ok);
       let msg = `✅ ${ok} preset${ok !== 1 ? "s" : ""} written to device buttons.`;
-      if (bad.length) {
-        msg += `  ⚠️ ${bad.map(r => `#${r.id}: ${r.reason}`).join(", ")}`;
-      }
-      resultEl.textContent = msg;
-      resultEl.style.display = "block";
+      if (bad.length) msg += `  ⚠️ ${bad.map(r => `#${r.id}: ${r.reason}`).join(", ")}`;
+      resultEl.textContent    = msg;
+      resultEl.style.display  = "block";
       toast("Device buttons updated!");
     } catch (e) {
-      showError("Sync request failed: " + e.message);
+      showError("Sync failed: " + e.message);
     } finally {
       btn.disabled = false;
-      btn.innerHTML = "<span>📲</span> Sync to Device Buttons";
     }
   }
 
-  function esc(s) {
-    return (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  }
-
-  // ── System ────────────────────────────────────────────────────────────────
-
-  let _rebootArmed = false;
-  let _rebootTimer = null;
+  // ── System — reboot ───────────────────────────────────────────────────────
 
   function rebootSystem() {
-    const btn = document.getElementById('reboot-btn');
+    const btn    = document.getElementById("reboot-btn");
+    const msgEl  = document.getElementById("reboot-msg");
 
     if (!_rebootArmed) {
-      // First tap — arm the button
       _rebootArmed = true;
-      btn.innerHTML   = '⚠️ Tap again to confirm reboot';
-      btn.style.borderColor = 'var(--red)';
-      btn.style.color       = 'var(--red)';
-      // Auto-disarm after 4 s so an accidental tap doesn't linger
-      _rebootTimer = setTimeout(_rebootDisarm, 4000);
+      const titleEl = btn.querySelector(".ios-item-title");
+      if (titleEl) titleEl.textContent = "Tap again to confirm reboot";
+      _rebootTimer = setTimeout(() => {
+        _rebootArmed = false;
+        if (titleEl) titleEl.textContent = "Reboot Pi";
+      }, 4000);
       return;
     }
 
-    // Second tap — confirmed
     clearTimeout(_rebootTimer);
     _rebootArmed = false;
-    btn.disabled    = true;
-    btn.innerHTML   = '⏳ Rebooting…';
-    btn.style.borderColor = '';
-    btn.style.color       = '';
+    btn.disabled = true;
+    const titleEl = btn.querySelector(".ios-item-title");
+    if (titleEl) titleEl.textContent = "Rebooting…";
 
-    api('/api/system/reboot', { method: 'POST' })
-      .then(data => {
-        _showRebootMsg(data.message);
-      })
-      .catch(() => {
-        // Network error here most likely means the Pi started rebooting
-        // before the response was fully delivered — treat as success.
-        _showRebootMsg(
-          'Rebooting…\n' +
-          'Reconnect in ~30 seconds and visit\n' +
-          'http://soundtouch.local:5000'
-        );
-      });
-  }
-
-  function _rebootDisarm() {
-    _rebootArmed = false;
-    const btn = document.getElementById('reboot-btn');
-    btn.innerHTML         = '🔄 Reboot Pi';
-    btn.style.borderColor = '';
-    btn.style.color       = '';
+    api("/api/system/reboot", { method: "POST" })
+      .then(data => _showRebootMsg(data.message))
+      .catch(() => _showRebootMsg(
+        "Rebooting…\nReconnect in ~30 seconds and visit\nhttp://soundtouch.local:5000"
+      ));
   }
 
   function _showRebootMsg(text) {
-    const msg = document.getElementById('reboot-msg');
-    msg.textContent   = text || 'Rebooting…';
-    msg.style.display = 'block';
+    const el = document.getElementById("reboot-msg");
+    el.textContent    = text || "Rebooting…";
+    el.style.display  = "block";
   }
 
   // ── WiFi management ───────────────────────────────────────────────────────
 
-  let wifiPanelOpen   = false;
-  let wifiHotspotMode = false;
-  let wifiSelectedSsid = null;
-  let wifiSelectedOpen = false;
-
   function toggleWifi() {
     wifiPanelOpen = !wifiPanelOpen;
     document.getElementById("wifi-panel").style.display = wifiPanelOpen ? "block" : "none";
-    document.getElementById("wifi-arrow").textContent   = wifiPanelOpen ? "▼" : "▶";
+    document.getElementById("wifi-arrow").classList.toggle("open", wifiPanelOpen);
     if (wifiPanelOpen) wifiLoadStatus();
   }
 
@@ -827,58 +1143,59 @@
       const ssidEl   = document.getElementById("wifi-ssid-label");
       const detailEl = document.getElementById("wifi-detail-label");
       const btn      = document.getElementById("wifi-hotspot-btn");
+      const titleEl  = btn.querySelector(".ios-item-title");
 
       wifiHotspotMode = data.mode === "hotspot";
 
       if (data.mode === "client") {
         ssidEl.textContent   = data.ssid || "Connected";
-        const sig = data.signal != null ? ` · ${data.signal}% signal` : "";
+        const sig = data.signal != null ? ` · ${data.signal}%` : "";
         detailEl.textContent = `Connected${sig}${data.ip ? " · " + data.ip : ""}`;
-        btn.innerHTML        = "📡 Enable Setup Hotspot";
+        if (titleEl) titleEl.textContent = "Enable Setup Hotspot";
       } else if (data.mode === "hotspot") {
-        ssidEl.textContent   = "Hotspot: " + (data.ssid || "SoundTouch-Setup");
+        ssidEl.textContent   = data.ssid || "SoundTouch-Setup";
         detailEl.textContent = `IP: ${data.ip || "10.42.0.1"} · Password: soundtouch`;
-        btn.innerHTML        = "🔌 Stop Hotspot";
+        if (titleEl) titleEl.textContent = "Stop Hotspot";
       } else {
         ssidEl.textContent   = "Not connected";
         detailEl.textContent = "";
-        btn.innerHTML        = "📡 Enable Setup Hotspot";
+        if (titleEl) titleEl.textContent = "Enable Setup Hotspot";
       }
-    } catch (_) { /* ignore */ }
+    } catch (_) {}
   }
 
   function wifiSignalIcon(pct) {
     if (pct >= 75) return "▂▄▆█";
     if (pct >= 50) return "▂▄▆░";
     if (pct >= 25) return "▂▄░░";
-    return            "▂░░░";
+    return              "▂░░░";
   }
 
   async function wifiScan() {
-    const btn = document.getElementById("wifi-scan-btn");
-    btn.disabled    = true;
-    btn.textContent = "Scanning…";
+    const btn     = document.getElementById("wifi-scan-btn");
+    const titleEl = btn.querySelector(".ios-item-title");
+    btn.disabled  = true;
+    if (titleEl) titleEl.textContent = "Scanning…";
     wifiHideMsg();
     try {
       const data = await api("/api/wifi/scan");
       if (!data.ok) { showError(data.error || "Scan failed"); return; }
-
       const container = document.getElementById("wifi-network-list");
       container.innerHTML = "";
-
       if (!data.networks.length) {
-        container.innerHTML = '<div style="color:var(--muted);font-size:0.82rem;text-align:center;padding:8px">No networks found</div>';
+        container.innerHTML = `<div style="padding:12px 16px;font-size:15px;color:var(--label2)">No networks found</div>`;
       } else {
-        data.networks.forEach(n => {
+        const sep = `<div class="ios-separator full"></div>`;
+        data.networks.forEach((n, i) => {
+          if (i > 0) container.insertAdjacentHTML("beforeend", sep);
           const div = document.createElement("div");
-          div.className = "wifi-network-item";
+          div.className = "wifi-network-row";
           div.innerHTML = `
-            <span style="font-size:1rem;font-family:monospace">${wifiSignalIcon(n.signal)}</span>
+            <span class="wifi-signal">${wifiSignalIcon(n.signal)}</span>
             <div style="flex:1;min-width:0">
-              <div style="font-size:0.9rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.ssid)}</div>
-              <div style="font-size:0.72rem;color:var(--muted)">${n.open ? "Open" : "🔒 Secured"} · ${n.signal}%</div>
+              <div style="font-size:17px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.ssid)}</div>
+              <div style="font-size:13px;color:var(--label2)">${n.open ? "Open" : "🔒 Secured"} · ${n.signal}%</div>
             </div>
-            <span style="font-size:0.7rem;color:var(--accent);flex-shrink:0">Connect</span>
           `;
           div.addEventListener("click", () => wifiSelectNetwork(n.ssid, n.open));
           container.appendChild(div);
@@ -888,21 +1205,21 @@
     } catch (e) {
       showError("Scan failed: " + e.message);
     } finally {
-      btn.disabled  = false;
-      btn.innerHTML = "🔍 Scan for Networks";
+      btn.disabled = false;
+      if (titleEl) titleEl.textContent = "Scan for Networks";
     }
   }
 
   function wifiSelectNetwork(ssid, open) {
     wifiSelectedSsid = ssid;
     wifiSelectedOpen = open;
-    document.getElementById("wifi-selected-name").textContent = ssid;
-    document.getElementById("wifi-pw-group").style.display   = open ? "none" : "block";
-    document.getElementById("wifi-pw-input").value           = "";
-    document.getElementById("wifi-connect-form").style.display = "block";
+    document.getElementById("wifi-selected-name").textContent    = ssid;
+    document.getElementById("wifi-pw-group").style.display       = open ? "none" : "block";
+    document.getElementById("wifi-pw-input").value               = "";
+    document.getElementById("wifi-connect-form").style.display   = "block";
     wifiHideMsg();
-    // Scroll form into view on mobile
-    document.getElementById("wifi-connect-form").scrollIntoView({behavior: "smooth", block: "nearest"});
+    document.getElementById("wifi-connect-form")
+      .scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
   function wifiCancelConnect() {
@@ -913,10 +1230,7 @@
   async function wifiDoConnect() {
     if (!wifiSelectedSsid) return;
     const password = document.getElementById("wifi-pw-input").value;
-    if (!wifiSelectedOpen && !password) {
-      alert("Enter the WiFi password");
-      return;
-    }
+    if (!wifiSelectedOpen && !password) { alert("Enter the WiFi password"); return; }
     const data = await api("/api/wifi/connect", {
       method: "POST",
       body: JSON.stringify({ ssid: wifiSelectedSsid, password }),
@@ -935,14 +1249,19 @@
 
   function wifiShowMsg(text, ok) {
     const el = document.getElementById("wifi-msg");
-    el.textContent = text;
-    el.className   = "wifi-message " + (ok ? "ok" : "fail");
-    el.style.display = "block";
+    el.textContent    = text;
+    el.className      = "wifi-message " + (ok ? "ok" : "fail");
+    el.style.display  = "block";
   }
 
   function wifiHideMsg() {
-    const el = document.getElementById("wifi-msg");
-    el.style.display = "none";
+    document.getElementById("wifi-msg").style.display = "none";
+  }
+
+  // ── Utilities ─────────────────────────────────────────────────────────────
+
+  function esc(s) {
+    return (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   }
 
   init();
