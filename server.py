@@ -1,5 +1,5 @@
 """
-Flask web server for SoundTouch Pi Controller.
+Flask web server for SoundTouch-Pi.
 Run with:  python3 server.py
 Access at: http://<pi-ip>:5000
 """
@@ -790,7 +790,7 @@ def api_system_reboot():
         "message": (
             "Rebooting…\n"
             "The controller will be back in about 30 seconds.\n"
-            "Reconnect and visit http://soundtouch.local:5000"
+            "Reconnect and visit http://soundtouch-pi.local:5000"
         ),
     })
 
@@ -835,7 +835,7 @@ def api_wifi_connect():
             f"Connecting to \"{ssid}\"…\n"
             "The Pi will switch networks in a moment.\n"
             "Reconnect your phone/laptop to the new WiFi, then visit:\n"
-            "http://soundtouch.local:5000"
+            "http://soundtouch-pi.local:5000"
         ),
     })
 
@@ -864,7 +864,7 @@ def api_wifi_hotspot_stop():
         "message": (
             "Stopping hotspot…\n"
             "Reconnect to your home WiFi, then visit:\n"
-            "http://soundtouch.local:5000"
+            "http://soundtouch-pi.local:5000"
         ),
     })
 
@@ -987,5 +987,5 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=5000)
     args = parser.parse_args()
     _startup(args.port)
-    print(f"SoundTouch Pi Controller running at http://0.0.0.0:{args.port}")
+    print(f"SoundTouch-Pi running at http://0.0.0.0:{args.port}")
     app.run(host="0.0.0.0", port=args.port, debug=False, threaded=True)

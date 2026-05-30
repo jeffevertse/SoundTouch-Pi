@@ -1,4 +1,4 @@
-# SoundTouch Pi Controller
+# SoundTouch-Pi
 
 A Raspberry Pi Zero 2 W controller for the Bose SoundTouch 20.
 
@@ -56,7 +56,7 @@ Use Raspberry Pi Imager. Before writing:
 ### 2. SSH in and install dependencies
 
 ```bash
-ssh pi@soundtouch.local
+ssh pi@soundtouch-pi.local
 sudo apt update && sudo apt install -y python3-pip python3-venv git
 
 git clone https://github.com/YOUR_USERNAME/soundtouch-pi.git
@@ -83,24 +83,24 @@ set the IP manually in `config.json`:
 }
 ```
 
-Access the web UI at **http://soundtouch.local:5000** from any phone or browser
+Access the web UI at **http://soundtouch-pi.local:5000** from any phone or browser
 on your home network.
 
 ### 4. Run on boot with systemd
 
 ```bash
-sudo nano /etc/systemd/system/soundtouch.service
+sudo nano /etc/systemd/system/soundtouch-pi.service
 ```
 
 ```ini
 [Unit]
-Description=SoundTouch Pi Controller
+Description=SoundTouch-Pi
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/home/pi/soundtouch-pi/venv/bin/gunicorn -c /home/pi/soundtouch-pi/gunicorn.conf.py server:app
-WorkingDirectory=/home/pi/soundtouch-pi
+ExecStart=/home/pi/SoundTouch-Pi/venv/bin/gunicorn -c /home/pi/SoundTouch-Pi/gunicorn.conf.py server:app
+WorkingDirectory=/home/pi/SoundTouch-Pi
 Restart=always
 RestartSec=10
 User=pi
@@ -110,8 +110,8 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo systemctl enable soundtouch
-sudo systemctl start soundtouch
+sudo systemctl enable soundtouch-pi
+sudo systemctl start soundtouch-pi
 ```
 
 The gunicorn config (`gunicorn.conf.py`) runs a single gthread worker with 8
@@ -171,7 +171,7 @@ The web UI includes a collapsible **WiFi Settings** panel that lets you:
 
 - See the current network, signal strength, and IP address
 - Scan for nearby networks and connect with a password
-- Switch to **setup hotspot** mode (`SoundTouch-Setup` / `soundtouch` / `10.42.0.1`)
+- Switch to **setup hotspot** mode (`SoundTouch-Pi-Setup` / `soundtouch-pi` / `10.42.0.1`)
 
 **Auto-hotspot:** If the Pi has no WiFi connection 30 seconds after boot, it
 automatically creates the setup hotspot so you can reconfigure it from any

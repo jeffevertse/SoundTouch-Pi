@@ -5,8 +5,8 @@ Works on Raspberry Pi OS Bookworm+ which uses NetworkManager by default.
 Key flows
 ---------
 Client mode  — Pi is connected to a normal WiFi network.
-Hotspot mode — Pi creates "SoundTouch-Setup" (10.42.0.1).  User connects to it
-               from a phone or laptop, visits http://soundtouch.local:5000 (or
+Hotspot mode — Pi creates "SoundTouch-Pi-Setup" (10.42.0.1).  User connects to it
+               from a phone or laptop, visits http://soundtouch-pi.local:5000 (or
                http://10.42.0.1:5000) and configures the target network.
 Auto-hotspot — called by server.py startup if Pi has no WiFi after 30 s.
 """
@@ -15,8 +15,8 @@ import subprocess
 import threading
 import time
 
-HOTSPOT_SSID     = "SoundTouch-Setup"
-HOTSPOT_PASSWORD = "soundtouch"
+HOTSPOT_SSID     = "SoundTouch-Pi-Setup"
+HOTSPOT_PASSWORD = "soundtouch-pi"
 HOTSPOT_IP       = "10.42.0.1"
 
 

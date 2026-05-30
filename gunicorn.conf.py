@@ -1,5 +1,5 @@
 """
-Gunicorn configuration for SoundTouch Pi Controller.
+Gunicorn configuration for SoundTouch-Pi.
 
 Production command (used by systemd service):
     gunicorn -c gunicorn.conf.py server:app

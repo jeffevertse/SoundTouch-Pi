@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>SoundTouch</title>
+  <title>SoundTouch-Pi</title>
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -583,7 +583,7 @@
 
   <!-- Navigation bar -->
   <nav class="ios-nav">
-    <div class="ios-nav-title">SoundTouch</div>
+    <div class="ios-nav-title">SoundTouch-Pi</div>
     <div class="ios-nav-subtitle" id="device-name">Connecting…</div>
   </nav>
 
@@ -743,7 +743,7 @@
         </div>
       </div>
       <div class="ios-section-footer">
-        Creates "SoundTouch-Setup" so you can reconfigure Wi-Fi from any device
+        Creates "SoundTouch-Pi-Setup" so you can reconfigure Wi-Fi from any device
       </div>
     </div>
 
@@ -1117,7 +1117,7 @@
     api("/api/system/reboot", { method: "POST" })
       .then(data => _showRebootMsg(data.message))
       .catch(() => _showRebootMsg(
-        "Rebooting…\nReconnect in ~30 seconds and visit\nhttp://soundtouch.local:5000"
+        "Rebooting…\nReconnect in ~30 seconds and visit\nhttp://soundtouch-pi.local:5000"
       ));
   }
 
@@ -1153,7 +1153,7 @@
         detailEl.textContent = `Connected${sig}${data.ip ? " · " + data.ip : ""}`;
         if (titleEl) titleEl.textContent = "Enable Setup Hotspot";
       } else if (data.mode === "hotspot") {
-        ssidEl.textContent   = data.ssid || "SoundTouch-Setup";
+        ssidEl.textContent   = data.ssid || "SoundTouch-Pi-Setup";
         detailEl.textContent = `IP: ${data.ip || "10.42.0.1"} · Password: soundtouch`;
         if (titleEl) titleEl.textContent = "Stop Hotspot";
       } else {
