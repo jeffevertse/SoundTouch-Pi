@@ -75,11 +75,7 @@
       line-height: 1.1;
       color: var(--label);
     }
-    .ios-nav-subtitle {
-      font-size: 13px;
-      color: var(--label2);
-      margin-top: 2px;
-    }
+
 
     /* ── Content area ────────────────────────────────────────────────────── */
     .ios-content {
@@ -584,7 +580,6 @@
   <!-- Navigation bar -->
   <nav class="ios-nav">
     <div class="ios-nav-title">SoundTouch-Pi</div>
-    <div class="ios-nav-subtitle" id="device-name">Connecting…</div>
   </nav>
 
   <div class="ios-content">
@@ -815,7 +810,6 @@
 
   async function init() {
     await Promise.all([loadStatus(), loadPresets(), loadBass()]);
-    loadInfo();
     connectSSE();
     setInterval(loadStatus, 30000);
     lucide.createIcons();
@@ -903,12 +897,6 @@
     applyVolume(data.volume);
   }
 
-  async function loadInfo() {
-    const data = await api("/api/info");
-    if (!data.ok) return;
-    document.getElementById("device-name").textContent =
-      `${data.info.name} · ${data.info.type}`;
-  }
 
   // ── Presets ───────────────────────────────────────────────────────────────
 
