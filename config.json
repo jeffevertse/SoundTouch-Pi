@@ -1,6 +1,6 @@
 {
   "device": {
-    "host": "192.168.1.61",
+    "host": null,
     "port": 8090,
     "ws_port": 8080,
     "auto_discover": true
