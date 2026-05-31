@@ -650,6 +650,27 @@
     </div>
     <div class="sync-result" id="sync-result" style="display:none;margin-top:-20px;margin-bottom:28px"></div>
 
+    <!-- Reconnect device (shown only when device is unreachable) -->
+    <div class="ios-action-row" id="reconnect-row" style="display:none">
+      <button class="ios-list-item tappable" id="reconnect-btn" onclick="reconnectDevice()" style="width:100%">
+        <span class="ios-item-icon" style="background:#FF9500"><i data-lucide="refresh-cw"></i></span>
+        <div class="ios-item-content">
+          <span class="ios-item-title">Find / Reconnect Device</span>
+          <span class="ios-item-detail">Use after a factory reset or if the device IP changed</span>
+        </div>
+        <span class="ios-chevron"><i data-lucide="chevron-right"></i></span>
+      </button>
+    </div>
+    <div class="sync-result" id="reconnect-result" style="display:none;margin-top:-20px;margin-bottom:8px"></div>
+    <!-- Manual IP entry (shown only when auto-discovery fails) -->
+    <div id="reconnect-manual" style="display:none;margin-top:-12px;margin-bottom:28px;padding:0 0 0 0">
+      <div style="display:flex;gap:8px;padding:0 16px 16px">
+        <input type="text" id="reconnect-ip" placeholder="e.g. 192.168.1.62"
+               style="flex:1;background:var(--fill);border:none;color:var(--label);border-radius:10px;padding:12px 14px;font-size:15px;font-family:inherit;outline:none;-webkit-appearance:none">
+        <button class="ios-btn primary" onclick="reconnectDeviceManual()" style="min-height:44px;font-size:15px;white-space:nowrap">Connect</button>
+      </div>
+    </div>
+
     <!-- Other Sources -->
     <div class="ios-section">
       <div class="ios-section-header">Other Sources</div>
@@ -894,7 +915,13 @@
 
   async function loadStatus() {
     const data = await api("/api/status");
-    if (!data.ok) { showError(data.error); return; }
+    const reconnectRow = document.getElementById("reconnect-row");
+    if (!data.ok) {
+      showError(data.error);
+      if (reconnectRow) reconnectRow.style.display = "";
+      return;
+    }
+    if (reconnectRow) reconnectRow.style.display = "none";
     applyNowPlaying(data.now_playing);
     applyVolume(data.volume);
   }
@@ -1079,6 +1106,54 @@
     } finally {
       btn.disabled = false;
     }
+  }
+
+  // ── Device reconnect ─────────────────────────────────────────────────────
+
+  async function _doReconnect(host) {
+    const btn      = document.getElementById("reconnect-btn");
+    const resultEl = document.getElementById("reconnect-result");
+    const manualEl = document.getElementById("reconnect-manual");
+    btn.disabled = true;
+    resultEl.style.display = "none";
+    manualEl.style.display = "none";
+    const origTitle  = btn.querySelector(".ios-item-title").textContent;
+    const origDetail = btn.querySelector(".ios-item-detail").textContent;
+    btn.querySelector(".ios-item-title").textContent  = host ? `Connecting to ${host}…` : "Scanning for device…";
+    btn.querySelector(".ios-item-detail").textContent = "";
+    try {
+      const body = host ? JSON.stringify({ host }) : undefined;
+      const data = await api("/api/device/reconnect", {
+        method: "POST",
+        headers: body ? { "Content-Type": "application/json" } : {},
+        body,
+      });
+      if (!data.ok) {
+        resultEl.textContent   = "⚠️ " + (data.error || "Device not found.");
+        resultEl.style.display = "block";
+        manualEl.style.display = "block";
+        return;
+      }
+      resultEl.textContent   = `✅ Connected to ${data.host} — resyncing presets…`;
+      resultEl.style.display = "block";
+      toast("Device reconnected!");
+      setTimeout(() => { resultEl.style.display = "none"; }, 8000);
+    } catch (e) {
+      resultEl.textContent   = "⚠️ " + e.message;
+      resultEl.style.display = "block";
+      manualEl.style.display = "block";
+    } finally {
+      btn.disabled = false;
+      btn.querySelector(".ios-item-title").textContent  = origTitle;
+      btn.querySelector(".ios-item-detail").textContent = origDetail;
+    }
+  }
+
+  function reconnectDevice()       { _doReconnect(null); }
+  function reconnectDeviceManual() {
+    const ip = document.getElementById("reconnect-ip").value.trim();
+    if (!ip) return;
+    _doReconnect(ip);
   }
 
   // ── System — reboot ───────────────────────────────────────────────────────

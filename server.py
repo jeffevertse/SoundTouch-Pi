@@ -771,6 +771,69 @@ def api_sync_hardware_presets():
         return jsonify({"ok": False, "error": str(e)}), 503
 
 
+# ── Device reconnect ──────────────────────────────────────────────────────
+
+def _reset_device():
+    """Stop the current device WebSocket and clear both singletons."""
+    global _st, _upnp
+    with _dev_lock:
+        if _st is not None:
+            try:
+                _st.stop_websocket()
+            except Exception:
+                pass
+            _st = None
+        _upnp = None
+
+
+@app.post("/api/device/reconnect")
+def api_device_reconnect():
+    """
+    Rediscover the SoundTouch device (e.g. after a factory reset or IP change).
+
+    Accepts an optional JSON body {"host": "x.x.x.x"} to skip auto-discovery
+    and connect directly to a known IP.  Without a body (or with host omitted /
+    null) the server runs mDNS + SSDP discovery to locate the device.
+
+    On success: updates config.json, tears down the stale singleton, creates a
+    new connection, and kicks off a hardware preset resync in the background.
+    """
+    data = request.get_json(silent=True) or {}
+    host = (data.get("host") or "").strip() or None
+
+    if not host:
+        host = discover(timeout=10)
+    if not host:
+        return jsonify({
+            "ok": False,
+            "error": "Device not found on the network. Enter the IP address manually.",
+        }), 404
+
+    # Validate: actually reach the device before saving the new host
+    from soundtouch import SoundTouch as _ST
+    try:
+        probe = _ST(host, port=8090)
+        probe.get_info()
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Found {host} but could not connect: {e}"}), 503
+
+    # Persist new host
+    cfg = load_config()
+    cfg["device"]["host"] = host
+    save_config(cfg)
+
+    # Drop old singleton → next get_device() builds a fresh one
+    _reset_device()
+
+    try:
+        get_device()
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Reconnected but setup failed: {e}"}), 503
+
+    threading.Thread(target=_resync_hardware_presets, daemon=True).start()
+    return jsonify({"ok": True, "host": host, "resyncing": True})
+
+
 # ── System ─────────────────────────────────────────────────────────────────
 
 @app.post("/api/system/reboot")
