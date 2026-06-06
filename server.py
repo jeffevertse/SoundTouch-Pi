@@ -13,7 +13,7 @@ import threading
 import time
 
 import requests as _req
-from flask import Flask, Response, jsonify, request, render_template, stream_with_context
+from flask import Flask, Response, jsonify, request, render_template, stream_with_context, make_response
 from soundtouch import SoundTouch
 from upnp_player import UPnPPlayer
 from discovery import discover
@@ -1000,9 +1000,25 @@ def api_debug_raw_select():
 
 # ── UI ─────────────────────────────────────────────────────────────────────
 
+def _app_version() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=os.path.dirname(__file__),
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except Exception:
+        return str(int(time.time()))
+
+
 @app.get("/")
 def index():
-    return render_template("index.html")
+    resp = make_response(render_template("index.html", version=_app_version()))
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 # ── GPIO optional ──────────────────────────────────────────────────────────
