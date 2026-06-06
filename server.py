@@ -836,6 +836,30 @@ def api_device_reconnect():
 
 # ── System ─────────────────────────────────────────────────────────────────
 
+@app.post("/api/system/update")
+def api_system_update():
+    """
+    Run apt upgrade + pip package updates in the background.
+    The update script restarts the service when done, so this response
+    is delivered before the process is killed.
+    """
+    def _update():
+        time.sleep(1)
+        print("[server] System update started via web UI")
+        subprocess.run(["sudo", "/usr/local/bin/pi-update.sh"])
+
+    threading.Thread(target=_update, daemon=True).start()
+    return jsonify({
+        "ok": True,
+        "message": (
+            "Update started…\n"
+            "apt upgrade + pip packages are updating.\n"
+            "The service will restart when done (~2–5 min).\n"
+            "Reconnect and visit http://soundtouch-pi.local:5000"
+        ),
+    })
+
+
 @app.post("/api/system/reboot")
 def api_system_reboot():
     """

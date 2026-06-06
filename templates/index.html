@@ -769,6 +769,14 @@
     <div class="ios-section">
       <div class="ios-section-header">System</div>
       <div class="ios-list-group">
+        <button class="ios-list-item tappable" id="update-btn" onclick="updateSystem()" style="width:100%">
+          <span class="ios-item-icon green"><i data-lucide="arrow-up-circle"></i></span>
+          <div class="ios-item-content">
+            <span class="ios-item-title" id="update-btn-title">Update Pi</span>
+            <span class="ios-item-detail">Updates system packages and pip dependencies</span>
+          </div>
+        </button>
+        <div class="ios-separator full"></div>
         <button class="ios-list-item tappable" id="reboot-btn" onclick="rebootSystem()" style="width:100%">
           <span class="ios-item-icon red"><i data-lucide="rotate-cw"></i></span>
           <div class="ios-item-content">
@@ -776,6 +784,7 @@
           </div>
         </button>
       </div>
+      <div class="reboot-msg" id="update-msg"></div>
       <div class="reboot-msg" id="reboot-msg"></div>
     </div>
 
@@ -1154,6 +1163,29 @@
     const ip = document.getElementById("reconnect-ip").value.trim();
     if (!ip) return;
     _doReconnect(ip);
+  }
+
+  // ── System — update ───────────────────────────────────────────────────────
+
+  async function updateSystem() {
+    const btn     = document.getElementById("update-btn");
+    const titleEl = document.getElementById("update-btn-title");
+    btn.disabled  = true;
+    titleEl.textContent = "Updating…";
+    try {
+      const data = await api("/api/system/update", { method: "POST" });
+      _showUpdateMsg(data.message || "Update started…");
+    } catch (e) {
+      titleEl.textContent = "Update Pi";
+      btn.disabled = false;
+      showError("Update failed: " + e.message);
+    }
+  }
+
+  function _showUpdateMsg(text) {
+    const el = document.getElementById("update-msg");
+    el.textContent   = text;
+    el.style.display = "block";
   }
 
   // ── System — reboot ───────────────────────────────────────────────────────
