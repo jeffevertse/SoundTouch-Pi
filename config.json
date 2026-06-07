@@ -42,5 +42,7 @@
       "stream_url": "",
       "icon": "⭕"
     }
-  ]
+  ],
+  "auth_token": null,
+  "hotspot_password": null
 }

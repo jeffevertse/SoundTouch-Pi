@@ -6,7 +6,7 @@ Key flows
 ---------
 Client mode  — Pi is connected to a normal WiFi network.
 Hotspot mode — Pi creates "SoundTouch-Pi-Setup" (10.42.0.1).  User connects to it
-               from a phone or laptop, visits http://soundtouch-pi.local:5000 (or
+               from a phone or laptop, visits https://soundtouch-pi.local:5000 (or
                http://10.42.0.1:5000) and configures the target network.
 Auto-hotspot — called by server.py startup if Pi has no WiFi after 30 s.
 """
@@ -15,9 +15,24 @@ import subprocess
 import threading
 import time
 
-HOTSPOT_SSID     = "SoundTouch-Pi-Setup"
-HOTSPOT_PASSWORD = "soundtouch-pi"
-HOTSPOT_IP       = "10.42.0.1"
+HOTSPOT_SSID = "SoundTouch-Pi-Setup"
+HOTSPOT_IP   = "10.42.0.1"
+
+
+# ── input validation ───────────────────────────────────────────────────────
+
+def _validate_ssid(ssid: str) -> None:
+    if not ssid:
+        raise ValueError("SSID must not be empty")
+    if len(ssid) > 32:
+        raise ValueError("SSID must be 32 characters or fewer")
+    if ssid.startswith("-"):
+        raise ValueError("SSID must not start with '-'")
+
+
+def _validate_password(password: str) -> None:
+    if len(password) > 63:
+        raise ValueError("WiFi password must be 63 characters or fewer")
 
 
 # ── low-level helper ───────────────────────────────────────────────────────
@@ -70,7 +85,6 @@ def get_status() -> dict:
     for line in conn_out.splitlines():
         parts = line.split(":")
         if len(parts) >= 2 and "wireless" in parts[1].lower():
-            # NAME contains "Hotspot" for nmcli-created hotspots
             if "hotspot" in parts[0].lower():
                 return {"mode": "hotspot", "connected": False,
                         "ssid": HOTSPOT_SSID, "signal": None, "ip": HOTSPOT_IP}
@@ -122,8 +136,8 @@ def connect_wifi(ssid: str, password: str,
                  on_done=None, delay: float = 1.5):
     """
     Connect to a WiFi network in a background thread.
+    Uses nmcli connection add/up (key-value API) to avoid argument injection.
     on_done(ok: bool, message: str) is called on completion (optional).
-    delay lets the HTTP response be sent before the network switch happens.
     """
     def _run():
         time.sleep(delay)
@@ -131,14 +145,31 @@ def connect_wifi(ssid: str, password: str,
 
         # Stop hotspot if running
         _nmcli_rw("connection", "down", "Hotspot", timeout=10)
+        # Remove stale profile for this SSID if one exists
+        _nmcli_rw("connection", "delete", ssid, timeout=10)
 
-        args = ["dev", "wifi", "connect", ssid, "ifname", "wlan0"]
+        args = [
+            "connection", "add",
+            "type",                   "wifi",
+            "ifname",                 "wlan0",
+            "con-name",               ssid,
+            "ssid",                   ssid,
+            "connection.autoconnect", "yes",
+        ]
         if password:
-            args += ["password", password]
+            args += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password]
 
         rc, out, err = _nmcli_rw(*args, timeout=40)
-        ok  = rc == 0 and "successfully activated" in (out + err).lower()
-        msg = out or err or ("Connected" if ok else "Connection failed")
+        if rc != 0:
+            msg = err or "Connection profile creation failed"
+            print(f"[wifi] connect {ssid!r}: ✗ {msg}")
+            if on_done:
+                on_done(False, msg)
+            return
+
+        rc2, out2, err2 = _nmcli_rw("connection", "up", ssid, timeout=40)
+        ok  = rc2 == 0
+        msg = out2 or err2 or ("Connected" if ok else "Connection failed")
         print(f"[wifi] connect {ssid!r}: {'✓' if ok else '✗'} {msg}")
         if on_done:
             on_done(ok, msg)
@@ -148,18 +179,15 @@ def connect_wifi(ssid: str, password: str,
 
 # ── hotspot ────────────────────────────────────────────────────────────────
 
-def enable_hotspot(on_done=None, delay: float = 1.5):
-    """
-    Switch Pi to hotspot mode.
-    SSID: SoundTouch-Setup  |  Password: soundtouch  |  IP: 10.42.0.1
-    """
+def enable_hotspot(password: str, on_done=None, delay: float = 1.5):
+    """Switch Pi to hotspot mode. Password is supplied by caller from config."""
     def _run():
         time.sleep(delay)
         print(f"[wifi] Enabling hotspot {HOTSPOT_SSID!r}…")
         rc, out, err = _nmcli_rw(
             "dev", "wifi", "hotspot",
             "ssid",     HOTSPOT_SSID,
-            "password", HOTSPOT_PASSWORD,
+            "password", password,
             "ifname",   "wlan0",
             timeout=30,
         )
@@ -187,20 +215,18 @@ def disable_hotspot(on_done=None, delay: float = 1.5):
 
 # ── auto-hotspot on boot ───────────────────────────────────────────────────
 
-def auto_hotspot_if_disconnected(wait: int = 30):
+def auto_hotspot_if_disconnected(wait: int = 30, hotspot_password: str = "soundtouch-pi"):
     """
     Wait up to `wait` seconds for a WiFi connection.
     If still disconnected, enable the setup hotspot automatically.
-    Call once from server startup in a background thread.
     """
     def _run():
         for _ in range(wait):
             time.sleep(1)
             status = get_status()
             if status["connected"] or status["mode"] == "hotspot":
-                return  # Already connected or already in hotspot
-        # Still no connection
+                return
         print(f"[wifi] No WiFi after {wait}s — enabling setup hotspot")
-        enable_hotspot(delay=0)
+        enable_hotspot(password=hotspot_password, delay=0)
 
     threading.Thread(target=_run, daemon=True).start()

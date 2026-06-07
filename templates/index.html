@@ -769,6 +769,14 @@
     <div class="ios-section">
       <div class="ios-section-header">System</div>
       <div class="ios-list-group">
+        <div class="ios-list-item">
+          <span class="ios-item-icon gray"><i data-lucide="key"></i></span>
+          <div class="ios-item-content">
+            <span class="ios-item-title" style="font-size:13px;font-family:monospace;word-break:break-all">{{ auth_token }}</span>
+            <span class="ios-item-detail">Auth token — enter in iOS app Settings</span>
+          </div>
+        </div>
+        <div class="ios-separator full"></div>
         <button class="ios-list-item tappable" id="update-btn" onclick="updateSystem()" style="width:100%">
           <span class="ios-item-icon green"><i data-lucide="arrow-up-circle"></i></span>
           <div class="ios-item-content">
@@ -824,6 +832,9 @@
   <div class="toast" id="toast"></div>
 
 <script>
+  const AUTH_TOKEN      = {{ auth_token | tojson }};
+  const HOTSPOT_PASSWORD = {{ hotspot_password | tojson }};
+
   let presets          = [];
   let editingId        = null;
   let volTimer         = null;
@@ -850,11 +861,14 @@
   // ── API helper ────────────────────────────────────────────────────────────
 
   async function api(path, opts = {}) {
-    const r = await fetch(path, {
-      headers: { "Content-Type": "application/json" },
-      ...opts,
-    });
+    const headers = {
+      "Content-Type": "application/json",
+      "X-Auth-Token": AUTH_TOKEN,
+      ...(opts.headers || {}),
+    };
+    const r = await fetch(path, { ...opts, headers });
     const text = await r.text();
+    if (r.status === 401) throw new Error("Unauthorized — check auth token in Settings");
     try {
       return JSON.parse(text);
     } catch (_) {
@@ -1251,7 +1265,7 @@
         if (titleEl) titleEl.textContent = "Enable Setup Hotspot";
       } else if (data.mode === "hotspot") {
         ssidEl.textContent   = data.ssid || "SoundTouch-Pi-Setup";
-        detailEl.textContent = `IP: ${data.ip || "10.42.0.1"} · Password: soundtouch`;
+        detailEl.textContent = `IP: ${data.ip || "10.42.0.1"} · Password: ${HOTSPOT_PASSWORD}`;
         if (titleEl) titleEl.textContent = "Stop Hotspot";
       } else {
         ssidEl.textContent   = "Not connected";

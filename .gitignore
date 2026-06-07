@@ -1,6 +1,5 @@
-venv/
+certs/server.key
 __pycache__/
 *.pyc
 state.json
-state.json.tmp
 .DS_Store

@@ -4,13 +4,17 @@ Run with:  python3 server.py
 Access at: http://<pi-ip>:5000
 """
 
+import hmac
+import ipaddress
 import json
 import os
 import queue
+import secrets
 import socket
 import subprocess
 import threading
 import time
+from urllib.parse import urlparse
 
 import requests as _req
 from flask import Flask, Response, jsonify, request, render_template, stream_with_context, make_response
@@ -25,6 +29,29 @@ _server_port: int = 5000   # updated at startup; used by background threads
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
 app = Flask(__name__)
+
+# ── auth ───────────────────────────────────────────────────────────────────
+
+_AUTH_EXEMPT_EXACT    = {"/", "/favicon.ico", "/api/events"}
+_AUTH_EXEMPT_PREFIXES = ("/static/", "/api/stream/")
+
+
+@app.before_request
+def _check_auth():
+    path = request.path
+    if path in _AUTH_EXEMPT_EXACT:
+        return None
+    for prefix in _AUTH_EXEMPT_PREFIXES:
+        if path.startswith(prefix):
+            return None
+    cfg   = load_config()
+    token = cfg.get("auth_token") or ""
+    if not token:
+        return None   # secrets not generated yet — allow until startup completes
+    provided = request.headers.get("X-Auth-Token", "")
+    if not hmac.compare_digest(provided, token):
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+
 
 # ── config helpers ─────────────────────────────────────────────────────────
 
@@ -54,9 +81,10 @@ def load_config() -> dict:
 def save_config(cfg: dict):
     global _config_cache, _config_mtime
     with _config_lock:
-        with open(CONFIG_PATH, "w") as f:
+        tmp = CONFIG_PATH + ".tmp"
+        with open(tmp, "w") as f:
             json.dump(cfg, f, indent=2)
-        # Invalidate cache so the next load_config() sees the new content
+        os.replace(tmp, CONFIG_PATH)
         _config_cache = None
         _config_mtime = 0.0
 
@@ -170,6 +198,42 @@ def get_upnp() -> UPnPPlayer:
 _last_explicit_play_time: float = 0.0   # updated by _play_preset_id
 
 
+_PRIVATE_NETS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _validate_stream_url(url: str) -> None:
+    """Raise ValueError if url targets a private/loopback address or non-HTTP scheme."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Only http/https URLs are allowed (got {parsed.scheme!r})")
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("URL has no hostname")
+    try:
+        results = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as e:
+        raise ValueError(f"Cannot resolve hostname {hostname!r}: {e}")
+    for _fam, _type, _proto, _canon, sockaddr in results:
+        try:
+            addr = ipaddress.ip_address(sockaddr[0])
+        except ValueError:
+            continue
+        for net in _PRIVATE_NETS:
+            if addr in net:
+                raise ValueError(
+                    f"Stream URL resolves to a private/loopback address ({sockaddr[0]})"
+                )
+
+
 def _resolve_stream_url(url: str) -> str:
     """
     If url is a PLS or M3U playlist, fetch it and return the first direct
@@ -178,6 +242,7 @@ def _resolve_stream_url(url: str) -> str:
     """
     if not url:
         return url
+    _validate_stream_url(url)
     if url.startswith("https://"):
         url = "http://" + url[8:]
 
@@ -186,7 +251,15 @@ def _resolve_stream_url(url: str) -> str:
     is_playlist = any(lower.endswith(ext) for ext in (".pls", ".m3u", ".m3u8", ".xspf"))
     if not is_playlist:
         try:
-            head = _req.head(url, timeout=5, allow_redirects=True)
+            head = _req.head(url, timeout=5, allow_redirects=False)
+            if head.status_code in (301, 302, 303, 307, 308):
+                location = head.headers.get("Location", "")
+                try:
+                    _validate_stream_url(location)
+                except ValueError:
+                    location = ""
+                if location:
+                    head = _req.head(location, timeout=5, allow_redirects=False)
             ct = head.headers.get("Content-Type", "")
             is_playlist = any(x in ct for x in ("scpls", "mpegurl", "xspf"))
         except Exception:
@@ -195,10 +268,16 @@ def _resolve_stream_url(url: str) -> str:
     if not is_playlist:
         return url  # Already a direct stream
 
-    # Fetch and parse the playlist
+    # Fetch and parse the playlist (capped at 8 KB)
     try:
-        r = _req.get(url, timeout=10)
-        text = r.text
+        r = _req.get(url, timeout=10, stream=True)
+        raw = b""
+        for chunk in r.iter_content(chunk_size=1024):
+            raw += chunk
+            if len(raw) > 8192:
+                break
+        r.close()
+        text = raw.decode("utf-8", errors="replace")
         # PLS: look for File1=<url>  (or File2, etc.)
         for line in text.splitlines():
             line = line.strip()
@@ -470,7 +549,8 @@ def api_status():
 
         return jsonify({"ok": True, "now_playing": np, "volume": vol})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 503
+        print(f"[server] api_status: {e}")
+        return jsonify({"ok": False, "error": "Internal error"}), 503
 
 
 @app.get("/api/presets")
@@ -505,18 +585,24 @@ def api_save_preset(preset_id: int):
     if not 1 <= preset_id <= 6:
         return jsonify({"ok": False, "error": "Preset ID must be 1–6"}), 400
     data = request.get_json()
+    stream_url = data.get("stream_url", "").strip()
+    if stream_url:
+        try:
+            _validate_stream_url(stream_url)
+        except ValueError as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
     cfg = load_config()
     for preset in cfg["presets"]:
         if preset["id"] == preset_id:
             preset["name"]       = data.get("name", preset["name"])
-            preset["stream_url"] = data.get("stream_url", preset.get("stream_url", ""))
+            preset["stream_url"] = stream_url or preset.get("stream_url", "")
             preset["icon"]       = data.get("icon", preset.get("icon", "📻"))
             break
     else:
         cfg["presets"].append({
             "id":         preset_id,
             "name":       data.get("name", f"Preset {preset_id}"),
-            "stream_url": data.get("stream_url", ""),
+            "stream_url": stream_url,
             "icon":       data.get("icon", "📻"),
         })
     save_config(cfg)
@@ -533,7 +619,8 @@ def api_set_volume():
         get_device().set_volume(int(level))
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 503
+        print(f"[server] api_set_volume: {e}")
+        return jsonify({"ok": False, "error": "Internal error"}), 503
 
 
 @app.post("/api/control/<action>")
@@ -559,7 +646,8 @@ def api_control(action: str):
         fn(get_device())
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 503
+        print(f"[server] api_control/{action}: {e}")
+        return jsonify({"ok": False, "error": "Internal error"}), 503
 
 
 @app.get("/api/info")
@@ -568,7 +656,8 @@ def api_info():
         d = get_device()
         return jsonify({"ok": True, "info": d.get_info(), "host": d.host})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 503
+        print(f"[server] api_info: {e}")
+        return jsonify({"ok": False, "error": "Internal error"}), 503
 
 
 @app.get("/api/sources")
@@ -576,7 +665,8 @@ def api_sources():
     try:
         return jsonify({"ok": True, "sources": get_device().get_sources()})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 503
+        print(f"[server] api_sources: {e}")
+        return jsonify({"ok": False, "error": "Internal error"}), 503
 
 
 @app.get("/api/bass")
@@ -587,7 +677,8 @@ def api_get_bass():
         level = d.get_bass() if caps["available"] else None
         return jsonify({"ok": True, "level": level, "caps": caps})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 503
+        print(f"[server] api_get_bass: {e}")
+        return jsonify({"ok": False, "error": "Internal error"}), 503
 
 
 @app.post("/api/bass")
@@ -597,7 +688,8 @@ def api_set_bass():
         get_device().set_bass(int(data["level"]))
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 503
+        print(f"[server] api_set_bass: {e}")
+        return jsonify({"ok": False, "error": "Internal error"}), 503
 
 
 # ── stream proxy ──────────────────────────────────────────────────────────
@@ -629,11 +721,23 @@ def api_stream_proxy(preset_id: int):
             stream_url,
             stream=True,
             timeout=15,
+            allow_redirects=False,
             headers={
                 "User-Agent":   "SoundTouch/1.0",
                 "Icy-MetaData": "1",
             },
         )
+        # Follow one redirect if the target is safe
+        if upstream.status_code in (301, 302, 303, 307, 308):
+            location = upstream.headers.get("Location", "")
+            _validate_stream_url(location)   # raises ValueError if unsafe
+            upstream = _req.get(
+                location,
+                stream=True,
+                timeout=15,
+                allow_redirects=False,
+                headers={"User-Agent": "SoundTouch/1.0", "Icy-MetaData": "1"},
+            )
         content_type = upstream.headers.get("Content-Type", "audio/mpeg")
 
         def generate():
@@ -655,7 +759,7 @@ def api_stream_proxy(preset_id: int):
         )
     except Exception as e:
         print(f"[proxy] Stream error for preset {preset_id}: {e}")
-        return f"Stream error: {e}", 502
+        return "Stream error", 502
 
 
 def _resync_hardware_presets():
@@ -764,11 +868,12 @@ def api_sync_hardware_presets():
                 results.append({"id": pid, "ok": True, "proxy_url": proxy_url})
                 print(f"[server] Stored hardware preset {pid}: {name} → {proxy_url}")
             except Exception as e:
-                results.append({"id": pid, "ok": False, "reason": str(e)})
+                results.append({"id": pid, "ok": False, "reason": "sync failed"})
                 print(f"[server] Failed to store preset {pid}: {e}")
         return jsonify({"ok": True, "results": results})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 503
+        print(f"[server] api_sync_hardware_presets: {e}")
+        return jsonify({"ok": False, "error": "Internal error"}), 503
 
 
 # ── Device reconnect ──────────────────────────────────────────────────────
@@ -828,7 +933,8 @@ def api_device_reconnect():
     try:
         get_device()
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Reconnected but setup failed: {e}"}), 503
+        print(f"[server] api_device_reconnect setup: {e}")
+        return jsonify({"ok": False, "error": "Reconnected but setup failed"}), 503
 
     threading.Thread(target=_resync_hardware_presets, daemon=True).start()
     return jsonify({"ok": True, "host": host, "resyncing": True})
@@ -855,7 +961,7 @@ def api_system_update():
             "Update started…\n"
             "apt upgrade + pip packages are updating.\n"
             "The service will restart when done (~2–5 min).\n"
-            "Reconnect and visit http://soundtouch-pi.local:5000"
+            "Reconnect and visit https://soundtouch-pi.local:5000"
         ),
     })
 
@@ -877,7 +983,7 @@ def api_system_reboot():
         "message": (
             "Rebooting…\n"
             "The controller will be back in about 30 seconds.\n"
-            "Reconnect and visit http://soundtouch-pi.local:5000"
+            "Reconnect and visit https://soundtouch-pi.local:5000"
         ),
     })
 
@@ -889,7 +995,8 @@ def api_wifi_status():
     try:
         return jsonify({"ok": True, **wifi_manager.get_status()})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 503
+        print(f"[server] api_wifi_status: {e}")
+        return jsonify({"ok": False, "error": "Internal error"}), 503
 
 
 @app.get("/api/wifi/scan")
@@ -898,7 +1005,8 @@ def api_wifi_scan():
         networks = wifi_manager.scan_networks()
         return jsonify({"ok": True, "networks": networks})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 503
+        print(f"[server] api_wifi_scan: {e}")
+        return jsonify({"ok": False, "error": "Internal error"}), 503
 
 
 @app.post("/api/wifi/connect")
@@ -913,8 +1021,11 @@ def api_wifi_connect():
     password = data.get("password", "")
     if not ssid:
         return jsonify({"ok": False, "error": "SSID required"}), 400
-    # delay=2.0 gives the HTTP response time to be delivered before
-    # the Pi drops the current network connection.
+    try:
+        wifi_manager._validate_ssid(ssid)
+        wifi_manager._validate_password(password)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
     wifi_manager.connect_wifi(ssid, password, delay=2.0)
     return jsonify({
         "ok": True,
@@ -922,21 +1033,23 @@ def api_wifi_connect():
             f"Connecting to \"{ssid}\"…\n"
             "The Pi will switch networks in a moment.\n"
             "Reconnect your phone/laptop to the new WiFi, then visit:\n"
-            "http://soundtouch-pi.local:5000"
+            "https://soundtouch-pi.local:5000"
         ),
     })
 
 
 @app.post("/api/wifi/hotspot")
 def api_wifi_hotspot():
-    """Enable the setup hotspot (SoundTouch-Setup / soundtouch / 10.42.0.1)."""
-    wifi_manager.enable_hotspot(delay=2.0)
+    """Enable the setup hotspot."""
+    cfg = load_config()
+    hotspot_pw = cfg.get("hotspot_password") or "soundtouch-pi"
+    wifi_manager.enable_hotspot(password=hotspot_pw, delay=2.0)
     return jsonify({
         "ok": True,
         "message": (
             f"Starting hotspot \"{wifi_manager.HOTSPOT_SSID}\"…\n"
             f"Connect your phone/laptop to that network\n"
-            f"(password: {wifi_manager.HOTSPOT_PASSWORD}), then visit:\n"
+            f"(password: {hotspot_pw}), then visit:\n"
             f"http://{wifi_manager.HOTSPOT_IP}:5000"
         ),
     })
@@ -951,7 +1064,7 @@ def api_wifi_hotspot_stop():
         "message": (
             "Stopping hotspot…\n"
             "Reconnect to your home WiFi, then visit:\n"
-            "http://soundtouch-pi.local:5000"
+            "https://soundtouch-pi.local:5000"
         ),
     })
 
@@ -1014,7 +1127,13 @@ def _app_version() -> str:
 
 @app.get("/")
 def index():
-    resp = make_response(render_template("index.html", version=_app_version()))
+    cfg = load_config()
+    resp = make_response(render_template(
+        "index.html",
+        version=_app_version(),
+        auth_token=cfg.get("auth_token", ""),
+        hotspot_password=cfg.get("hotspot_password", ""),
+    ))
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     resp.headers["Expires"] = "0"
@@ -1063,6 +1182,22 @@ def warmup():
         print(f"Could not connect at startup: {e}")
 
 
+def _ensure_secrets():
+    """Generate auth_token and hotspot_password on first run; never overwrite existing."""
+    cfg = load_config()
+    changed = False
+    if not cfg.get("auth_token"):
+        cfg["auth_token"] = secrets.token_hex(16)
+        changed = True
+    if not cfg.get("hotspot_password"):
+        cfg["hotspot_password"] = secrets.token_urlsafe(6)[:8]
+        changed = True
+    if changed:
+        save_config(cfg)
+        print(f"[server] Generated new secrets (auth_token={cfg['auth_token'][:8]}…)")
+    return cfg
+
+
 def _startup(port: int = 5000):
     """
     Initialise background tasks.
@@ -1074,13 +1209,12 @@ def _startup(port: int = 5000):
     """
     global _server_port
     _server_port = port
-    cfg = load_config()
+    cfg = _ensure_secrets()
     if cfg.get("gpio_buttons"):
         setup_gpio(cfg)
     threading.Thread(target=warmup, daemon=True).start()
-    # If the Pi has no WiFi after 30 s, enable the setup hotspot automatically
-    # so the user can reconfigure via http://10.42.0.1:5000
-    wifi_manager.auto_hotspot_if_disconnected(wait=30)
+    hotspot_pw = cfg.get("hotspot_password", "soundtouch-pi")
+    wifi_manager.auto_hotspot_if_disconnected(wait=30, hotspot_password=hotspot_pw)
     print(f"[server] Background tasks started (port={_server_port})")
 
 

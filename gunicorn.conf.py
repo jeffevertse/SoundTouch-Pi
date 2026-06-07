@@ -16,6 +16,8 @@ Worker model
 """
 
 bind             = "0.0.0.0:5000"
+certfile         = "certs/server.crt"
+keyfile          = "certs/server.key"
 workers          = 1
 worker_class     = "gthread"
 threads          = 8
