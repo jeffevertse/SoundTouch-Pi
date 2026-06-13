@@ -196,6 +196,8 @@ def get_upnp() -> UPnPPlayer:
 #   play to ever miss an auto-resume, which is an acceptable edge case).
 
 _last_explicit_play_time: float = 0.0   # updated by _play_preset_id
+_last_explicit_off_time:  float = 0.0   # updated when the user powers the device off
+_RESUME_SUPPRESS_AFTER_OFF = 120        # seconds to suppress auto-resume after an explicit power-off
 
 
 _PRIVATE_NETS = [
@@ -341,17 +343,30 @@ def _play_preset_id(preset_id: int) -> bool:
 
 
 def _auto_resume():
-    """Resume the last played preset on power-on or Pi reboot."""
+    """Resume the last played preset on a genuine power-on / Pi reboot."""
     time.sleep(3)   # give the device a moment to finish booting
+    # Respect an intentional power-off: if the user just turned the device off,
+    # don't immediately wake it back up.  Without this, the STANDBY transition
+    # (WebSocket drop + transient now-playing) can look like a power-ON and
+    # trigger a spurious resume.
+    if time.time() - _last_explicit_off_time < _RESUME_SUPPRESS_AFTER_OFF:
+        print("[server] Auto-resume suppressed — recent explicit power-off")
+        return
     saved = st.load()
     last_id = saved.get("last_preset_id")
     if not last_id:
         print("[server] Auto-resume: no last preset saved — skipping")
         return
-    # Don't double-play if the device is already streaming something
     try:
-        np = get_device().now_playing()
-        if np.get("status") in ("PLAY_STATE", "BUFFERING_STATE"):
+        np     = get_device().now_playing()
+        src    = np.get("source") or ""
+        status = np.get("status") or ""
+        # Never wake a device that is currently in standby — auto-resume is only
+        # meant to RESUME a device that has come back on, not turn one on.
+        if src == "STANDBY":
+            print("[server] Auto-resume: device in standby — skipping (won't wake it)")
+            return
+        if status in ("PLAY_STATE", "BUFFERING_STATE"):
             print("[server] Auto-resume: device already playing — skipping")
             return
     except Exception:
@@ -643,7 +658,14 @@ def api_control(action: str):
     if not fn:
         return jsonify({"ok": False, "error": "Unknown action"}), 400
     try:
-        fn(get_device())
+        d = get_device()
+        if action == "power":
+            # Power is a toggle.  Record OFF intent (clear it on ON) so the
+            # auto-resume detection doesn't immediately wake the device back up.
+            global _last_explicit_off_time
+            going_off = (d.now_playing().get("source") or "") not in ("STANDBY", "")
+            _last_explicit_off_time = time.time() if going_off else 0.0
+        fn(d)
         return jsonify({"ok": True})
     except Exception as e:
         print(f"[server] api_control/{action}: {e}")
