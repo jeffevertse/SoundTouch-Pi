@@ -14,7 +14,7 @@ import socket
 import subprocess
 import threading
 import time
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 import requests as _req
 from flask import Flask, Response, jsonify, request, render_template, stream_with_context, make_response
@@ -216,14 +216,16 @@ _RESUME_SUPPRESS_AFTER_OFF = 120        # seconds to suppress auto-resume after 
 
 
 _PRIVATE_NETS = [
+    ipaddress.ip_network("0.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
     ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),   # link-local + cloud metadata (169.254.169.254)
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("fc00::/7"),
     ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("::ffff:0:0/96"),     # IPv4-mapped IPv6
 ]
 
 
@@ -251,6 +253,58 @@ def _validate_stream_url(url: str) -> None:
                 )
 
 
+def _resolve_public_ip(host: str) -> str:
+    """
+    Resolve `host`, reject it if it resolves to any private/loopback/link-local
+    address, and return the first public IP. Returning the exact resolved IP lets
+    callers pin it for the connection, closing the DNS-rebinding window between
+    validation and the actual fetch.
+    """
+    try:
+        results = socket.getaddrinfo(host, None)
+    except socket.gaierror as e:
+        raise ValueError(f"Cannot resolve hostname {host!r}: {e}")
+    public: str | None = None
+    for _fam, _type, _proto, _canon, sockaddr in results:
+        try:
+            addr = ipaddress.ip_address(sockaddr[0])
+        except ValueError:
+            continue
+        if any(addr in net for net in _PRIVATE_NETS):
+            raise ValueError(f"{host!r} resolves to a private/loopback address ({addr})")
+        if public is None:
+            public = sockaddr[0]
+    if public is None:
+        raise ValueError(f"{host!r} did not resolve to a usable address")
+    return public
+
+
+def _safe_fetch(method: str, url: str, **kwargs):
+    """
+    DNS-rebinding-safe HTTP fetch. Downgrades HTTPS→HTTP (the SoundTouch 20 can't
+    do TLS on media anyway), resolves + validates the host ONCE, then connects to
+    that exact IP while preserving the original Host header for virtual-host
+    routing. Redirects are NOT followed automatically — callers re-validate the
+    Location through this same function.
+    """
+    if url.startswith("https://"):
+        url = "http://" + url[len("https://"):]
+    parsed = urlparse(url)
+    if parsed.scheme != "http":
+        raise ValueError(f"Only http/https URLs are allowed (got {parsed.scheme!r})")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("URL has no hostname")
+    ip   = _resolve_public_ip(host)
+    port = parsed.port or 80
+    netloc = f"[{ip}]:{port}" if ":" in ip else f"{ip}:{port}"
+    pinned = urlunparse(parsed._replace(netloc=netloc))
+    headers = dict(kwargs.pop("headers", None) or {})
+    headers["Host"] = parsed.netloc   # keep the original host[:port] for routing
+    kwargs.setdefault("allow_redirects", False)
+    return _req.request(method, pinned, headers=headers, **kwargs)
+
+
 def _resolve_stream_url(url: str) -> str:
     """
     If url is a PLS or M3U playlist, fetch it and return the first direct
@@ -268,15 +322,11 @@ def _resolve_stream_url(url: str) -> str:
     is_playlist = any(lower.endswith(ext) for ext in (".pls", ".m3u", ".m3u8", ".xspf"))
     if not is_playlist:
         try:
-            head = _req.head(url, timeout=5, allow_redirects=False)
+            head = _safe_fetch("HEAD", url, timeout=5)
             if head.status_code in (301, 302, 303, 307, 308):
                 location = head.headers.get("Location", "")
-                try:
-                    _validate_stream_url(location)
-                except ValueError:
-                    location = ""
                 if location:
-                    head = _req.head(location, timeout=5, allow_redirects=False)
+                    head = _safe_fetch("HEAD", location, timeout=5)
             ct = head.headers.get("Content-Type", "")
             is_playlist = any(x in ct for x in ("scpls", "mpegurl", "xspf"))
         except Exception:
@@ -287,7 +337,7 @@ def _resolve_stream_url(url: str) -> str:
 
     # Fetch and parse the playlist (capped at 8 KB)
     try:
-        r = _req.get(url, timeout=10, stream=True)
+        r = _safe_fetch("GET", url, timeout=10, stream=True)
         raw = b""
         for chunk in r.iter_content(chunk_size=1024):
             raw += chunk
@@ -754,27 +804,12 @@ def api_stream_proxy(preset_id: int):
         return "No stream URL configured", 404
 
     try:
-        upstream = _req.get(
-            stream_url,
-            stream=True,
-            timeout=15,
-            allow_redirects=False,
-            headers={
-                "User-Agent":   "SoundTouch/1.0",
-                "Icy-MetaData": "1",
-            },
-        )
-        # Follow one redirect if the target is safe
+        _hdrs = {"User-Agent": "SoundTouch/1.0", "Icy-MetaData": "1"}
+        upstream = _safe_fetch("GET", stream_url, stream=True, timeout=15, headers=_hdrs)
+        # Follow one redirect (re-validated + IP-pinned by _safe_fetch)
         if upstream.status_code in (301, 302, 303, 307, 308):
             location = upstream.headers.get("Location", "")
-            _validate_stream_url(location)   # raises ValueError if unsafe
-            upstream = _req.get(
-                location,
-                stream=True,
-                timeout=15,
-                allow_redirects=False,
-                headers={"User-Agent": "SoundTouch/1.0", "Icy-MetaData": "1"},
-            )
+            upstream = _safe_fetch("GET", location, stream=True, timeout=15, headers=_hdrs)
         content_type = upstream.headers.get("Content-Type", "audio/mpeg")
 
         def generate():
@@ -1263,4 +1298,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     _startup(args.port)
     print(f"SoundTouch-Pi running at http://0.0.0.0:{args.port}")
+    print("⚠️  This dev server is plain HTTP — the auth token is sent in clear "
+          "text and can be sniffed on the LAN. For real use, run via gunicorn "
+          "with TLS (see gunicorn.conf.py / README).")
     app.run(host="0.0.0.0", port=args.port, debug=False, threaded=True)
