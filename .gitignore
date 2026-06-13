@@ -1,5 +1,25 @@
-certs/server.key
+# Runtime config (gets auth_token / hotspot_password written into it) + state
+config.json
+state.json
+
+# Secrets / keys / certificates
+certs/
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+.env
+.env.*
+secrets.json
+
+# Python
 __pycache__/
 *.pyc
-state.json
+*.pyo
+
+# Logs
+*.log
+
+# macOS
 .DS_Store

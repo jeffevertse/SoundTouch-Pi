@@ -27,6 +27,21 @@ import wifi_manager
 _server_port: int = 5000   # updated at startup; used by background threads
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+# Shipped template. config.json itself is gitignored because it gets the
+# generated auth_token / hotspot_password written into it at runtime.
+CONFIG_EXAMPLE_PATH = os.path.join(os.path.dirname(__file__), "config.example.json")
+
+
+def _seed_config():
+    """Create config.json from the bundled template on first run."""
+    if os.path.exists(CONFIG_PATH):
+        return
+    try:
+        with open(CONFIG_EXAMPLE_PATH) as src, open(CONFIG_PATH, "w") as dst:
+            dst.write(src.read())
+        print("[server] Created config.json from config.example.json")
+    except Exception as e:
+        print(f"[server] Could not seed config.json: {e}")
 
 app = Flask(__name__)
 
@@ -1231,6 +1246,7 @@ def _startup(port: int = 5000):
     """
     global _server_port
     _server_port = port
+    _seed_config()
     cfg = _ensure_secrets()
     if cfg.get("gpio_buttons"):
         setup_gpio(cfg)
