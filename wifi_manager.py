@@ -10,6 +10,7 @@ Hotspot mode — Pi creates "SoundTouch-Pi-Setup" (10.42.0.1).  User connects to
                http://10.42.0.1:5000) and configures the target network.
 Auto-hotspot — called by server.py startup if Pi has no WiFi after 30 s.
 """
+from __future__ import annotations
 
 import subprocess
 import threading

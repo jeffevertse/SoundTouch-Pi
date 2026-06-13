@@ -2,12 +2,10 @@
 Discovers a SoundTouch speaker on the local network.
 Tries mDNS first (_soundtouch._tcp.local), then SSDP as fallback.
 """
+from __future__ import annotations
 
 import socket
-import time
-import struct
 import threading
-import xml.etree.ElementTree as ET
 
 SSDP_ADDR = "239.255.255.250"
 SSDP_PORT = 1900

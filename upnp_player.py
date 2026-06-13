@@ -7,6 +7,7 @@ control URL via SSDP, then push any HTTP stream URL to it with SOAP.
 
 No Bose account, no cloud, no /select — pure DLNA.
 """
+from __future__ import annotations
 
 import socket
 import xml.etree.ElementTree as ET
@@ -84,10 +85,6 @@ def _parse_avt_control_url(description_url: str) -> str | None:
     base = f"{parsed.scheme}://{parsed.netloc}"
 
     root = ET.fromstring(r.text)
-
-    # Walk every element regardless of namespace
-    service_type_tag = None
-    control_url_tag = None
 
     # Collect all elements into a flat list so we can walk siblings
     all_elems = list(root.iter())
@@ -254,7 +251,7 @@ class UPnPPlayer:
             raise RuntimeError(
                 f"SetAVTransportURI failed: {_parse_soap_fault(r.text)}"
             )
-        print(f"[upnp] Play")
+        print("[upnp] Play")
         r = avt_play(ctrl)
         if not r.ok:
             raise RuntimeError(f"Play failed: {_parse_soap_fault(r.text)}")

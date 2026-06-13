@@ -2,6 +2,7 @@
 SoundTouch Web API wrapper.
 HTTP on port 8090, WebSocket notifications on port 8080 (protocol: gabbo).
 """
+from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 import threading

@@ -3,6 +3,7 @@ Flask web server for SoundTouch-Pi.
 Run with:  python3 server.py
 Access at: http://<pi-ip>:5000
 """
+from __future__ import annotations
 
 import hmac
 import ipaddress
